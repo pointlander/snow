@@ -96,7 +96,7 @@ func main() {
 		for i, v := range ranks {
 			u.Data[index*u.Cols+i] = float32(v)
 		}
-		if count%(3*30) == 0 {
+		if count%(30) == 0 {
 			switch index {
 			case 5:
 				say <- "left"
