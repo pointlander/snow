@@ -5,21 +5,77 @@
 package main
 
 import (
-	"fmt"
 	"math"
 	"math/rand"
 
 	"github.com/alixaxel/pagerank"
+
+	htgotts "github.com/hegedustibor/htgo-tts"
+	handlers "github.com/hegedustibor/htgo-tts/handlers"
+	voices "github.com/hegedustibor/htgo-tts/voices"
 )
 
+// Pixel is a pixel sensor
+type Pixel struct {
+	X, Y  int
+	Mixer Mixer
+}
+
 func main() {
+	speech := htgotts.Speech{Folder: "audio", Language: voices.English, Handler: &handlers.MPlayer{}}
+	speech.Speak("Starting...")
+
+	camera := NewV4LCamera()
+	say := make(chan string, 8)
+	go func() {
+		for s := range say {
+			speech.Speak(s)
+		}
+	}()
+
 	rng := rand.New(rand.NewSource(1))
-	u := NewMatrix(8, 8)
+	u := NewMatrix(256, 8)
 	for i := 0; i < u.Cols*u.Rows; i++ {
 		u.Data = append(u.Data, rng.Float32())
 	}
 
-	for {
+	var pixels []Pixel
+	go camera.Start("/dev/video0")
+	count := 0
+	for img := range camera.Images {
+		width := img.Gray.Bounds().Max.X
+		height := img.Gray.Bounds().Max.Y
+		if pixels == nil {
+			for i := 0; i < 256; i++ {
+				mixer := NewMixer()
+				x := rng.Intn(width)
+				y := rng.Intn(height)
+				pixels = append(pixels, Pixel{
+					X:     x,
+					Y:     y,
+					Mixer: mixer,
+				})
+			}
+		}
+		inputs := []*[Size]float32{}
+		for i := range pixels {
+			pixel := img.Gray.GrayAt(pixels[i].X, pixels[i].Y)
+			pixels[i].Mixer.Add(pixel.Y)
+			inputs = append(inputs, pixels[i].Mixer.Mix())
+		}
+		{
+			graph := pagerank.NewGraph()
+			for i := 0; i < len(inputs); i++ {
+				for j := 0; j < len(inputs); j++ {
+					p := CS(inputs[i][:], inputs[j][:])
+					graph.Link(uint32(i), uint32(j), float64(p))
+				}
+			}
+			graph.Rank(1.0, 1e-3, func(node uint32, rank float64) {
+				u.Data[node] = float32(rank)
+			})
+		}
+
 		graph := pagerank.NewGraph()
 		for i := 0; i < u.Rows; i++ {
 			for j := 0; j < u.Rows; j++ {
@@ -40,12 +96,16 @@ func main() {
 		for i, v := range ranks {
 			u.Data[index*u.Cols+i] = float32(v)
 		}
-		for i := 0; i < u.Rows; i++ {
-			for j := 0; j < u.Cols; j++ {
-				fmt.Printf("%f ", u.Data[i*u.Cols+j])
+		if count%(3*30) == 0 {
+			switch index {
+			case 5:
+				say <- "left"
+			case 6:
+				say <- "right"
+			case 7:
+				say <- "straight"
 			}
-			fmt.Println()
 		}
-		fmt.Println()
+		count++
 	}
 }
