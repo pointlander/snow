@@ -33,7 +33,7 @@ func main() {
 	}()
 
 	rng := rand.New(rand.NewSource(1))
-	u := NewMatrix(256, 8)
+	u := NewMatrix(256, 256)
 	for i := 0; i < u.Cols*u.Rows; i++ {
 		u.Data = append(u.Data, rng.Float32())
 	}
@@ -42,8 +42,8 @@ func main() {
 	go camera.Start("/dev/video0")
 	count := 0
 	for img := range camera.Images {
-		width := img.Gray.Bounds().Max.X
-		height := img.Gray.Bounds().Max.Y
+		width := img.Frame.Bounds().Max.X
+		height := img.Frame.Bounds().Max.Y
 		if pixels == nil {
 			for i := 0; i < 256; i++ {
 				mixer := NewMixer()
@@ -58,7 +58,7 @@ func main() {
 		}
 		inputs := []*[Size]float32{}
 		for i := range pixels {
-			pixel := img.Gray.GrayAt(pixels[i].X, pixels[i].Y)
+			pixel := img.GrayAt(pixels[i].X, pixels[i].Y)
 			pixels[i].Mixer.Add(pixel.Y)
 			inputs = append(inputs, pixels[i].Mixer.Mix())
 		}
@@ -97,15 +97,13 @@ func main() {
 		for i, v := range ranks {
 			u.Data[index*u.Cols+i] = float32(v)
 		}
-		if count%(30) == 0 {
-			switch index {
-			case 5:
-				say <- "left"
-			case 6:
-				say <- "right"
-			case 7:
-				say <- "straight"
-			}
+		switch {
+		case index%3 == 0:
+			say <- "left"
+		case index%3 == 1:
+			say <- "right"
+		case index%3 == 2:
+			say <- "straight"
 		}
 		count++
 	}

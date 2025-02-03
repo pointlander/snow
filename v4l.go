@@ -18,7 +18,11 @@ import (
 // Frame is a video frame
 type Frame struct {
 	Frame *image.YCbCr
-	Gray  *image.Gray
+}
+
+// GrayAt returns the gray byte at
+func (f *Frame) GrayAt(x, y int) color.Gray {
+	return color.GrayModel.Convert(f.Frame.At(x, y)).(color.Gray)
 }
 
 // FrameSizes is a slice of FrameSize
@@ -148,19 +152,10 @@ func (vc *V4LCamera) Start(device string) {
 				yuyv.Cr[i] = cp[ii+3]
 
 			}
-			gray := image.NewGray(yuyv.Bounds())
-			dx := yuyv.Bounds().Dx()
-			dy := yuyv.Bounds().Dy()
-			for x := 0; x < dx; x++ {
-				for y := 0; y < dy; y++ {
-					gray.Set(x, y, color.GrayModel.Convert(yuyv.At(x, y)))
-				}
-			}
 
 			select {
 			case vc.Images <- Frame{
 				Frame: yuyv,
-				Gray:  gray,
 			}:
 			default:
 				//fmt.Println("drop", device)
