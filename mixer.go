@@ -104,3 +104,20 @@ func (m Mixer) Mix() *[Size]float32 {
 	})
 	return &output
 }
+
+// MixPlain mixes the histograms outputting a matrix
+func (m Mixer) MixPlain() *[256]float32 {
+	output := [256]float32{}
+	x := NewMatrix(256, Size)
+	for i := range m.Histograms {
+		sum := float32(0.0)
+		for _, v := range m.Histograms[i].Vector {
+			sum += float32(v)
+		}
+		for _, v := range m.Histograms[i].Vector {
+			x.Data = append(x.Data, float32(v)/sum)
+		}
+	}
+	SelfAttention(x, &output)
+	return &output
+}
