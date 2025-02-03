@@ -89,7 +89,7 @@ func main() {
 		index, sum, selected := 0, 0.0, rng.Float64()
 		for i, v := range ranks {
 			sum += v
-			if sum < selected {
+			if selected < sum {
 				index = i
 				break
 			}
