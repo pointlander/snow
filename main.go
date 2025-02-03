@@ -5,7 +5,6 @@
 package main
 
 import (
-	"math"
 	"math/rand"
 
 	"github.com/alixaxel/pagerank"
@@ -87,10 +86,12 @@ func main() {
 		graph.Rank(1.0, 1e-3, func(node uint32, rank float64) {
 			ranks[node] = rank
 		})
-		min, index := math.MaxFloat64, 0
+		index, sum, selected := 0, 0.0, rng.Float64()
 		for i, v := range ranks {
-			if v < min {
-				min, index = v, i
+			sum += v
+			if sum < selected {
+				index = i
+				break
 			}
 		}
 		for i, v := range ranks {
