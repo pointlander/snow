@@ -56,11 +56,11 @@ func main() {
 				})
 			}
 		}
-		inputs := []*[Size]float32{}
+		inputs := []*[256]float32{}
 		for i := range pixels {
 			pixel := img.GrayAt(pixels[i].X, pixels[i].Y)
 			pixels[i].Mixer.Add(pixel.Y)
-			inputs = append(inputs, pixels[i].Mixer.Mix())
+			inputs = append(inputs, pixels[i].Mixer.MixPlain())
 		}
 		{
 			graph := pagerank.NewGraph()
