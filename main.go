@@ -115,33 +115,11 @@ func main() {
 		}
 	}()
 
-	options := &serial.Mode{
-		BaudRate: 115200,
-	}
-	port, err := serial.Open("/dev/ttyAMA0", options)
-	if err != nil {
-		panic(err)
-	}
-
-	var running bool
-
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-	go func() {
-		<-c
-		err := port.Close()
-		if err != nil {
-			panic(err)
-		}
-		running = false
-		os.Exit(1)
-	}()
-
 	a := ActionNone
 
 	go camera.Start("/dev/video0")
 
-	go func() {
+	mind := func() {
 		actions := make([]int, 6)
 		rng := rand.New(rand.NewSource(1))
 		u := NewMatrix(256, 256)
@@ -245,9 +223,31 @@ func main() {
 			}
 			count++
 		}
-	}()
+	}
 
 	if *FlagRobot {
+		options := &serial.Mode{
+			BaudRate: 115200,
+		}
+		port, err := serial.Open("/dev/ttyAMA0", options)
+		if err != nil {
+			panic(err)
+		}
+
+		var running bool
+
+		c := make(chan os.Signal, 1)
+		signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+		go func() {
+			<-c
+			err := port.Close()
+			if err != nil {
+				panic(err)
+			}
+			running = false
+			os.Exit(1)
+		}()
+
 		var event sdl.Event
 		sdl.Init(sdl.INIT_JOYSTICK)
 		defer sdl.Quit()
@@ -473,5 +473,9 @@ func main() {
 
 			sdl.Delay(16)
 		}
+
+		go mind()
+	} else {
+		mind()
 	}
 }
