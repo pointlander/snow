@@ -10,13 +10,13 @@ import (
 
 const (
 	// Size is the number of histograms
-	Size = 8
+	Size = 13
 )
 
 // Histogram is a buffered histogram
 type Histogram struct {
-	Vector [256]byte
-	Buffer [128]byte
+	Vector [256]uint16
+	Buffer [4096]byte
 	Index  int
 	Size   int
 }
@@ -56,6 +56,11 @@ func NewMixer() Mixer {
 	histograms[5] = NewHistogram(32)
 	histograms[6] = NewHistogram(64)
 	histograms[7] = NewHistogram(128)
+	histograms[8] = NewHistogram(256)
+	histograms[9] = NewHistogram(512)
+	histograms[10] = NewHistogram(1024)
+	histograms[11] = NewHistogram(2048)
+	histograms[12] = NewHistogram(4096)
 	return Mixer{
 		Histograms: histograms,
 	}
