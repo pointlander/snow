@@ -199,8 +199,8 @@ func main() {
 		go hemisphere(2, right)
 
 		actions := make([]int, 6)
+		count := 0
 		for index := range indexes {
-			count := 0
 			if !*FlagRobot {
 				if count%60 == 0 {
 					max, index := 0, 0
