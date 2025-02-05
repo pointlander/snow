@@ -142,6 +142,7 @@ func main() {
 	go camera.Start("/dev/video0")
 
 	go func() {
+		actions := make([]int, 6)
 		rng := rand.New(rand.NewSource(1))
 		u := NewMatrix(256, 256)
 		for i := 0; i < u.Cols*u.Rows; i++ {
@@ -216,19 +217,30 @@ func main() {
 					say <- "straight"
 				}
 			} else {
-				switch {
-				case index%6 == 0:
-					a = ActionForward
-				case index%6 == 1:
-					a = ActionBackward
-				case index%6 == 2:
-					a = ActionLeft
-				case index%6 == 3:
-					a = ActionRight
-				case index%6 == 4:
-					a = ActionLight
-				case index%6 == 5:
-					a = ActionNone
+				if count%30 == 0 {
+					max, index := 0, 0
+					for i, v := range actions {
+						actions[i] = 0
+						if v > max {
+							max, index = v, i
+						}
+					}
+					switch index {
+					case 0:
+						a = ActionForward
+					case 1:
+						a = ActionBackward
+					case 2:
+						a = ActionLeft
+					case 3:
+						a = ActionRight
+					case 4:
+						a = ActionLight
+					case 5:
+						a = ActionNone
+					}
+				} else {
+					actions[index%6]++
 				}
 			}
 			count++
