@@ -170,6 +170,7 @@ func main() {
 				pixels[i].Mixer.Add(pixel.Y)
 				inputs = append(inputs, pixels[i].Mixer.MixPlain())
 			}
+			embedding := make([]float32, len(inputs))
 			{
 				graph := pagerank.NewGraph()
 				for i := 0; i < len(inputs); i++ {
@@ -179,7 +180,7 @@ func main() {
 					}
 				}
 				graph.Rank(1.0, 1e-3, func(node uint32, rank float64) {
-					u.Data[node] = float32(rank)
+					embedding[node] = float32(rank)
 				})
 			}
 
@@ -202,7 +203,7 @@ func main() {
 					break
 				}
 			}
-			for i, v := range ranks {
+			for i, v := range embedding {
 				u.Data[index*u.Cols+i] = float32(v)
 			}
 			if !*FlagRobot {
