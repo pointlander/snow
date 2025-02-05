@@ -353,6 +353,8 @@ func main() {
 			}
 		}()
 
+		go mind()
+
 		_, _ = joystickLeft, joystickRight
 		for running {
 			for event = sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
@@ -473,8 +475,6 @@ func main() {
 
 			sdl.Delay(16)
 		}
-
-		go mind()
 	} else {
 		mind()
 	}
