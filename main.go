@@ -120,82 +120,115 @@ func main() {
 	go camera.Start("/dev/video0")
 
 	mind := func() {
-		actions := make([]int, 6)
-		rng := rand.New(rand.NewSource(1))
-		u := NewMatrix(256, 256)
-		for i := 0; i < u.Cols*u.Rows; i++ {
-			u.Data = append(u.Data, rng.Float32())
-		}
-		var pixels []Pixel
-		count := 0
-		for img := range camera.Images {
-			width := img.Frame.Bounds().Max.X
-			height := img.Frame.Bounds().Max.Y
-			if pixels == nil {
-				for i := 0; i < 256; i++ {
-					mixer := NewMixer()
-					x := rng.Intn(width)
-					y := rng.Intn(height)
-					pixels = append(pixels, Pixel{
-						X:     x,
-						Y:     y,
-						Mixer: mixer,
+		indexes, left, right := make(chan int, 8), make(chan Frame, 8), make(chan Frame, 8)
+		go func() {
+			for img := range camera.Images {
+				left <- img
+				right <- img
+			}
+		}()
+		hemisphere := func(images chan Frame) {
+			rng := rand.New(rand.NewSource(1))
+			u := NewMatrix(256, 256)
+			for i := 0; i < u.Cols*u.Rows; i++ {
+				u.Data = append(u.Data, rng.Float32())
+			}
+			var pixels []Pixel
+			for img := range images {
+				width := img.Frame.Bounds().Max.X
+				height := img.Frame.Bounds().Max.Y
+				if pixels == nil {
+					for i := 0; i < 256; i++ {
+						mixer := NewMixer()
+						x := rng.Intn(width)
+						y := rng.Intn(height)
+						pixels = append(pixels, Pixel{
+							X:     x,
+							Y:     y,
+							Mixer: mixer,
+						})
+					}
+				}
+				inputs := []*[256]float32{}
+				for i := range pixels {
+					pixel := img.GrayAt(pixels[i].X, pixels[i].Y)
+					pixels[i].Mixer.Add(pixel.Y)
+					inputs = append(inputs, pixels[i].Mixer.MixPlain())
+				}
+				embedding := make([]float32, len(inputs))
+				{
+					graph := pagerank.NewGraph()
+					for i := 0; i < len(inputs); i++ {
+						for j := 0; j < len(inputs); j++ {
+							p := CS(inputs[i][:], inputs[j][:])
+							graph.Link(uint32(i), uint32(j), float64(p))
+						}
+					}
+					graph.Rank(1.0, 1e-3, func(node uint32, rank float64) {
+						embedding[node] = float32(rank)
 					})
 				}
-			}
-			inputs := []*[256]float32{}
-			for i := range pixels {
-				pixel := img.GrayAt(pixels[i].X, pixels[i].Y)
-				pixels[i].Mixer.Add(pixel.Y)
-				inputs = append(inputs, pixels[i].Mixer.MixPlain())
-			}
-			embedding := make([]float32, len(inputs))
-			{
+
 				graph := pagerank.NewGraph()
-				for i := 0; i < len(inputs); i++ {
-					for j := 0; j < len(inputs); j++ {
-						p := CS(inputs[i][:], inputs[j][:])
+				for i := 0; i < u.Rows; i++ {
+					for j := 0; j < u.Rows; j++ {
+						p := CS(u.Data[i*u.Cols:(i+1)*u.Cols], u.Data[j*u.Cols:(j+1)*u.Cols])
 						graph.Link(uint32(i), uint32(j), float64(p))
 					}
 				}
+				ranks := make([]float64, u.Rows)
 				graph.Rank(1.0, 1e-3, func(node uint32, rank float64) {
-					embedding[node] = float32(rank)
+					ranks[node] = rank
 				})
+				index, sum, selected := 0, 0.0, rng.Float64()
+				for i, v := range ranks {
+					sum += v
+					if selected < sum {
+						index = i
+						break
+					}
+				}
+				for i, v := range embedding {
+					u.Data[index*u.Cols+i] = float32(v)
+				}
+				indexes <- index
 			}
+		}
 
-			graph := pagerank.NewGraph()
-			for i := 0; i < u.Rows; i++ {
-				for j := 0; j < u.Rows; j++ {
-					p := CS(u.Data[i*u.Cols:(i+1)*u.Cols], u.Data[j*u.Cols:(j+1)*u.Cols])
-					graph.Link(uint32(i), uint32(j), float64(p))
-				}
-			}
-			ranks := make([]float64, u.Rows)
-			graph.Rank(1.0, 1e-3, func(node uint32, rank float64) {
-				ranks[node] = rank
-			})
-			index, sum, selected := 0, 0.0, rng.Float64()
-			for i, v := range ranks {
-				sum += v
-				if selected < sum {
-					index = i
-					break
-				}
-			}
-			for i, v := range embedding {
-				u.Data[index*u.Cols+i] = float32(v)
-			}
+		go hemisphere(left)
+		go hemisphere(right)
+
+		actions := make([]int, 6)
+		for index := range indexes {
+			count := 0
 			if !*FlagRobot {
-				switch {
-				case index%3 == 0:
-					say <- "left"
-				case index%3 == 1:
-					say <- "right"
-				case index%3 == 2:
-					say <- "straight"
+				if count%60 == 0 {
+					max, index := 0, 0
+					for i, v := range actions {
+						actions[i] = 0
+						if v > max {
+							max, index = v, i
+						}
+					}
+					switch index {
+					case 0:
+						say <- "forward"
+					case 1:
+						say <- "backward"
+					case 2:
+						say <- "left"
+					case 3:
+						say <- "right"
+					case 4:
+						say <- "light"
+					case 5:
+						say <- "none"
+					}
+				} else {
+					actions[index%6]++
 				}
 			} else {
-				if count%30 == 0 {
+				if count%60 == 0 {
 					max, index := 0, 0
 					for i, v := range actions {
 						actions[i] = 0
