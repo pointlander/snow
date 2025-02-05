@@ -127,8 +127,8 @@ func main() {
 				right <- img
 			}
 		}()
-		hemisphere := func(images chan Frame) {
-			rng := rand.New(rand.NewSource(1))
+		hemisphere := func(seed int64, images chan Frame) {
+			rng := rand.New(rand.NewSource(seed))
 			u := NewMatrix(256, 256)
 			for i := 0; i < u.Cols*u.Rows; i++ {
 				u.Data = append(u.Data, rng.Float32())
@@ -195,8 +195,8 @@ func main() {
 			}
 		}
 
-		go hemisphere(left)
-		go hemisphere(right)
+		go hemisphere(1, left)
+		go hemisphere(2, right)
 
 		actions := make([]int, 6)
 		for index := range indexes {
