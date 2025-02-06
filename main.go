@@ -137,7 +137,7 @@ func main() {
 			for img := range images {
 				width := img.Frame.Bounds().Max.X
 				height := img.Frame.Bounds().Max.Y
-				if pixels == nil {
+				if *pixels == nil {
 					for i := 0; i < 256; i++ {
 						mixer := NewMixer()
 						x := rng.Intn(width)
@@ -280,6 +280,7 @@ func main() {
 							width, height := (pixelsLeft)[p].Width, (pixelsLeft)[p].Height
 							(pixelsLeft)[p].X = rng.Intn(width)
 							(pixelsLeft)[p].Y = rng.Intn(height)
+							fmt.Println("resample left")
 						} else {
 							if len(pixelsRight) == 0 {
 								break
@@ -288,6 +289,7 @@ func main() {
 							width, height := (pixelsRight)[p].Width, (pixelsRight)[p].Height
 							(pixelsRight)[p].X = rng.Intn(width)
 							(pixelsRight)[p].Y = rng.Intn(height)
+							fmt.Println("resample right")
 						}
 					}
 				} else {
