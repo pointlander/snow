@@ -130,7 +130,7 @@ func main() {
 		}()
 		hemisphere := func(seed int64, images chan Frame) {
 			rng := rand.New(rand.NewSource(seed))
-			u := NewMatrix(256, 256)
+			u := NewMatrix(256, 512)
 			for i := 0; i < u.Cols*u.Rows; i++ {
 				u.Data = append(u.Data, rng.Float32())
 			}
