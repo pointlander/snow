@@ -229,11 +229,17 @@ func main() {
 						say <- "none"
 					case 6:
 						if rng.Intn(2) == 0 {
+							if len(pixelsLeft) == 0 {
+								break
+							}
 							p := rng.Intn(len(pixelsLeft))
 							width, height := (pixelsLeft)[p].Width, (pixelsLeft)[p].Height
 							(pixelsLeft)[p].X = rng.Intn(width)
 							(pixelsLeft)[p].Y = rng.Intn(height)
 						} else {
+							if len(pixelsRight) == 0 {
+								break
+							}
 							p := rng.Intn(len(pixelsRight))
 							width, height := (pixelsRight)[p].Width, (pixelsRight)[p].Height
 							(pixelsRight)[p].X = rng.Intn(width)
@@ -267,11 +273,17 @@ func main() {
 						a = ActionNone
 					case 6:
 						if rng.Intn(2) == 0 {
+							if len(pixelsLeft) == 0 {
+								break
+							}
 							p := rng.Intn(len(pixelsLeft))
 							width, height := (pixelsLeft)[p].Width, (pixelsLeft)[p].Height
 							(pixelsLeft)[p].X = rng.Intn(width)
 							(pixelsLeft)[p].Y = rng.Intn(height)
 						} else {
+							if len(pixelsRight) == 0 {
+								break
+							}
 							p := rng.Intn(len(pixelsRight))
 							width, height := (pixelsRight)[p].Width, (pixelsRight)[p].Height
 							(pixelsRight)[p].X = rng.Intn(width)
