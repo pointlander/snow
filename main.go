@@ -128,21 +128,22 @@ func main() {
 				right <- img
 			}
 		}()
-		hemisphere := func(pixels *[]Pixel, seed int64, images chan Frame) {
+		hemisphere := func(seed int64, images chan Frame) {
 			rng := rand.New(rand.NewSource(seed))
 			u := NewMatrix(256, 256)
 			for i := 0; i < u.Cols*u.Rows; i++ {
 				u.Data = append(u.Data, rng.Float32())
 			}
+			var pixels []Pixel
 			for img := range images {
 				width := img.Frame.Bounds().Max.X
 				height := img.Frame.Bounds().Max.Y
-				if *pixels == nil {
+				if pixels == nil {
 					for i := 0; i < 256; i++ {
 						mixer := NewMixer()
 						x := rng.Intn(width)
 						y := rng.Intn(height)
-						*pixels = append(*pixels, Pixel{
+						pixels = append(pixels, Pixel{
 							X:      x,
 							Y:      y,
 							Mixer:  mixer,
@@ -152,10 +153,10 @@ func main() {
 					}
 				}
 				inputs := []*[256]float32{}
-				for i := range *pixels {
-					pixel := img.GrayAt((*pixels)[i].X, (*pixels)[i].Y)
-					(*pixels)[i].Mixer.Add(pixel.Y)
-					inputs = append(inputs, (*pixels)[i].Mixer.MixPlain())
+				for i := range pixels {
+					pixel := img.GrayAt(pixels[i].X, pixels[i].Y)
+					pixels[i].Mixer.Add(pixel.Y)
+					inputs = append(inputs, pixels[i].Mixer.MixPlain())
 				}
 				embedding := make([]float32, len(inputs))
 				{
@@ -197,13 +198,11 @@ func main() {
 			}
 		}
 
-		var pixelsLeft, pixelsRight []Pixel
-		go hemisphere(&pixelsLeft, 1, left)
-		go hemisphere(&pixelsRight, 2, right)
+		go hemisphere(1, left)
+		go hemisphere(2, right)
 
-		actions := make([]int, 7)
+		actions := make([]int, 6)
 		count := 0
-		rng := rand.New(rand.NewSource(1))
 		for index := range indexes {
 			if !*FlagRobot {
 				if count%60 == 0 {
@@ -227,27 +226,9 @@ func main() {
 						say <- "light"
 					case 5:
 						say <- "none"
-					case 6:
-						if rng.Intn(2) == 0 {
-							if len(pixelsLeft) == 0 {
-								break
-							}
-							p := rng.Intn(len(pixelsLeft))
-							width, height := (pixelsLeft)[p].Width, (pixelsLeft)[p].Height
-							(pixelsLeft)[p].X = rng.Intn(width)
-							(pixelsLeft)[p].Y = rng.Intn(height)
-						} else {
-							if len(pixelsRight) == 0 {
-								break
-							}
-							p := rng.Intn(len(pixelsRight))
-							width, height := (pixelsRight)[p].Width, (pixelsRight)[p].Height
-							(pixelsRight)[p].X = rng.Intn(width)
-							(pixelsRight)[p].Y = rng.Intn(height)
-						}
 					}
 				} else {
-					actions[index%7]++
+					actions[index%6]++
 				}
 			} else {
 				if count%60 == 0 {
@@ -271,29 +252,9 @@ func main() {
 						a = ActionLight
 					case 5:
 						a = ActionNone
-					case 6:
-						if rng.Intn(2) == 0 {
-							if len(pixelsLeft) == 0 {
-								break
-							}
-							p := rng.Intn(len(pixelsLeft))
-							width, height := (pixelsLeft)[p].Width, (pixelsLeft)[p].Height
-							(pixelsLeft)[p].X = rng.Intn(width)
-							(pixelsLeft)[p].Y = rng.Intn(height)
-							fmt.Println("resample left")
-						} else {
-							if len(pixelsRight) == 0 {
-								break
-							}
-							p := rng.Intn(len(pixelsRight))
-							width, height := (pixelsRight)[p].Width, (pixelsRight)[p].Height
-							(pixelsRight)[p].X = rng.Intn(width)
-							(pixelsRight)[p].Y = rng.Intn(height)
-							fmt.Println("resample right")
-						}
 					}
 				} else {
-					actions[index%7]++
+					actions[index%6]++
 				}
 			}
 			count++
