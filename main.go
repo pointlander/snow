@@ -25,11 +25,20 @@ import (
 
 var joysticks = make(map[int]*sdl.Joystick)
 
+// Item is an item in a circular buffer
+type Item struct {
+	Vector *[256]float32
+	Next   byte
+	Action byte
+}
+
 // Pixel is a pixel sensor
 type Pixel struct {
-	X, Y          int
-	Mixer         Mixer
-	Width, Height int
+	X, Y   int
+	Mixer  Mixer
+	Error  Mixer
+	Index  int
+	Buffer [32]Item
 }
 
 type (
@@ -130,10 +139,6 @@ func main() {
 		}()
 		hemisphere := func(seed int64, images chan Frame) {
 			rng := rand.New(rand.NewSource(seed))
-			u := NewMatrix(256, 256)
-			for i := 0; i < u.Cols*u.Rows; i++ {
-				u.Data = append(u.Data, rng.Float32())
-			}
 			var pixels []Pixel
 			for img := range images {
 				width := img.Frame.Bounds().Max.X
@@ -141,22 +146,46 @@ func main() {
 				if pixels == nil {
 					for i := 0; i < 256; i++ {
 						mixer := NewMixer()
+						e := NewMixer()
 						x := rng.Intn(width)
 						y := rng.Intn(height)
-						pixels = append(pixels, Pixel{
-							X:      x,
-							Y:      y,
-							Mixer:  mixer,
-							Width:  width,
-							Height: height,
-						})
+						pixel := Pixel{
+							X:     x,
+							Y:     y,
+							Mixer: mixer,
+							Error: e,
+						}
+						for j := range pixel.Buffer {
+							var vector [256]float32
+							for k := range vector {
+								vector[k] = rng.Float32()
+							}
+							pixel.Buffer[j].Vector = &vector
+							pixel.Buffer[j].Next = byte(rng.Intn(256))
+							pixel.Buffer[j].Action = byte(rng.Intn(6))
+						}
+						pixel.Mixer.Add(0)
+						pixel.Error.Add(0)
+						pixels = append(pixels, pixel)
 					}
 				}
-				inputs := []*[256]float32{}
+				inputs, indxs := []*[256]float32{}, []int{}
 				for i := range pixels {
 					pixel := img.GrayAt(pixels[i].X, pixels[i].Y)
-					pixels[i].Mixer.Add(pixel.Y)
-					inputs = append(inputs, pixels[i].Mixer.MixPlain())
+					query, max, index := pixels[i].Mixer.MixPlain(), float32(0.0), 0
+					for j := range pixels[i].Buffer {
+						cs := CS(query[:], pixels[i].Buffer[j].Vector[:])
+						if cs > max {
+							max, index = cs, j
+						}
+					}
+					diff := int(pixels[i].Buffer[index].Next) - int(pixel.Y)
+					if diff < 0 {
+						diff = -diff
+					}
+					inputs = append(inputs, pixels[i].Error.MixPlain())
+					indxs = append(indxs, index)
+					pixels[i].Error.Add(byte(diff))
 				}
 				embedding := make([]float32, len(inputs))
 				{
@@ -171,28 +200,33 @@ func main() {
 						embedding[node] = float32(rank)
 					})
 				}
-
-				graph := pagerank.NewGraph()
-				for i := 0; i < u.Rows; i++ {
-					for j := 0; j < u.Rows; j++ {
-						p := CS(u.Data[i*u.Cols:(i+1)*u.Cols], u.Data[j*u.Cols:(j+1)*u.Cols])
-						graph.Link(uint32(i), uint32(j), float64(p))
-					}
+				distribution := make([]float32, 6)
+				for i := range distribution {
+					distribution[i] = .05
 				}
-				ranks := make([]float64, u.Rows)
-				graph.Rank(1.0, 1e-3, func(node uint32, rank float64) {
-					ranks[node] = rank
-				})
-				index, sum, selected := 0, 0.0, rng.Float64()
-				for i, v := range ranks {
+				for i := range pixels {
+					distribution[pixels[i].Buffer[indxs[i]].Action] += embedding[i]
+				}
+				sum := float32(0.0)
+				for _, v := range distribution {
 					sum += v
-					if selected < sum {
+				}
+				selected, total, index := rng.Float32(), float32(0.0), 0
+				for i, v := range distribution {
+					total += v / sum
+					if selected < total {
 						index = i
 						break
 					}
 				}
-				for i, v := range embedding {
-					u.Data[index*u.Cols+i] = float32(v)
+				for i := range pixels {
+					pixel := img.GrayAt(pixels[i].X, pixels[i].Y)
+					query := pixels[i].Mixer.MixPlain()
+					pixels[i].Index = (pixels[i].Index + 1) % len(pixels[i].Buffer)
+					pixels[i].Buffer[pixels[i].Index].Vector = query
+					pixels[i].Buffer[pixels[i].Index].Next = pixel.Y
+					pixels[i].Buffer[pixels[i].Index].Action = byte(index)
+					pixels[i].Mixer.Add(pixel.Y)
 				}
 				indexes <- index
 			}
