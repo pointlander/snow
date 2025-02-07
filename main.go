@@ -146,12 +146,14 @@ func main() {
 				if pixels == nil {
 					for i := 0; i < 256; i++ {
 						mixer := NewMixer()
+						e := NewMixer()
 						x := rng.Intn(width)
 						y := rng.Intn(height)
 						pixel := Pixel{
 							X:     x,
 							Y:     y,
 							Mixer: mixer,
+							Error: e,
 						}
 						for j := range pixel.Buffer {
 							var vector [256]float32
