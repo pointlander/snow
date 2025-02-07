@@ -162,6 +162,8 @@ func main() {
 							pixel.Buffer[j].Next = byte(rng.Intn(256))
 							pixel.Buffer[j].Action = byte(rng.Intn(6))
 						}
+						pixel.Mixer.Add(0)
+						pixel.Error.Add(0)
 						pixels = append(pixels, pixel)
 					}
 				}
@@ -179,9 +181,9 @@ func main() {
 					if diff < 0 {
 						diff = -diff
 					}
-					pixels[i].Error.Add(byte(diff))
 					inputs = append(inputs, pixels[i].Error.MixPlain())
 					indxs = append(indxs, index)
+					pixels[i].Error.Add(byte(diff))
 				}
 				embedding := make([]float32, len(inputs))
 				{
