@@ -39,7 +39,7 @@ type Pixel struct {
 	Mixer  Mixer
 	Error  Mixer
 	Index  int
-	Buffer [256]Item
+	Buffer [1024]Item
 }
 
 type (
