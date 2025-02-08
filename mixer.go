@@ -5,7 +5,7 @@
 package main
 
 import (
-	"github.com/alixaxel/pagerank"
+// "github.com/alixaxel/pagerank"
 )
 
 const (
@@ -83,7 +83,7 @@ func (m *Mixer) Add(s byte) {
 	}
 }
 
-func (m Mixer) Mix() *[Size]float32 {
+/*func (m Mixer) Mix() *[Size]float32 {
 	output := [Size]float32{}
 	x := NewMatrix(256, Size)
 	for i := range m.Histograms {
@@ -108,10 +108,10 @@ func (m Mixer) Mix() *[Size]float32 {
 		output[node] = float32(rank)
 	})
 	return &output
-}
+}*/
 
-// MixPlain mixes the histograms outputting a matrix
-func (m Mixer) MixPlain() *[256]float32 {
+// Mix mixes the histograms outputting a matrix
+func (m Mixer) Mix() *[256]float32 {
 	output := [256]float32{}
 	x := NewMatrix(256, Size)
 	for i := range m.Histograms {

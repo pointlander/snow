@@ -14,8 +14,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/alixaxel/pagerank"
+	"github.com/pointlander/snow/vector"
 
+	"github.com/alixaxel/pagerank"
 	htgotts "github.com/hegedustibor/htgo-tts"
 	handlers "github.com/hegedustibor/htgo-tts/handlers"
 	voices "github.com/hegedustibor/htgo-tts/voices"
@@ -38,7 +39,7 @@ type Pixel struct {
 	Mixer  Mixer
 	Error  Mixer
 	Index  int
-	Buffer [32]Item
+	Buffer [256]Item
 }
 
 type (
@@ -156,11 +157,15 @@ func main() {
 							Error: e,
 						}
 						for j := range pixel.Buffer {
-							var vector [256]float32
-							for k := range vector {
-								vector[k] = rng.Float32()
+							var vec [256]float32
+							for k := range vec {
+								vec[k] = rng.Float32()
 							}
-							pixel.Buffer[j].Vector = &vector
+							scale := sqrt(vector.Dot(vec[:], vec[:]))
+							for k := range vec {
+								vec[k] /= scale
+							}
+							pixel.Buffer[j].Vector = &vec
 							pixel.Buffer[j].Next = byte(rng.Intn(256))
 							pixel.Buffer[j].Action = byte(rng.Intn(6))
 						}
@@ -172,7 +177,7 @@ func main() {
 				inputs, indxs := []*[256]float32{}, []int{}
 				for i := range pixels {
 					pixel := img.GrayAt(pixels[i].X, pixels[i].Y)
-					query, max, index := pixels[i].Mixer.MixPlain(), float32(0.0), 0
+					query, max, index := pixels[i].Mixer.Mix(), float32(0.0), 0
 					for j := range pixels[i].Buffer {
 						cs := CS(query[:], pixels[i].Buffer[j].Vector[:])
 						if cs > max {
@@ -183,8 +188,12 @@ func main() {
 					if diff < 0 {
 						diff = -diff
 					}
-					inputs = append(inputs, pixels[i].Error.MixPlain())
+					pixels[i].Index = (pixels[i].Index + 1) % len(pixels[i].Buffer)
+					pixels[i].Buffer[pixels[i].Index].Vector = query
+					pixels[i].Buffer[pixels[i].Index].Next = pixel.Y
+					inputs = append(inputs, pixels[i].Error.Mix())
 					indxs = append(indxs, index)
+					pixels[i].Mixer.Add(pixel.Y)
 					pixels[i].Error.Add(byte(diff))
 				}
 				embedding := make([]float32, len(inputs))
@@ -220,13 +229,7 @@ func main() {
 					}
 				}
 				for i := range pixels {
-					pixel := img.GrayAt(pixels[i].X, pixels[i].Y)
-					query := pixels[i].Mixer.MixPlain()
-					pixels[i].Index = (pixels[i].Index + 1) % len(pixels[i].Buffer)
-					pixels[i].Buffer[pixels[i].Index].Vector = query
-					pixels[i].Buffer[pixels[i].Index].Next = pixel.Y
 					pixels[i].Buffer[pixels[i].Index].Action = byte(index)
-					pixels[i].Mixer.Add(pixel.Y)
 				}
 				indexes <- index
 			}
