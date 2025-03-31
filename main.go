@@ -37,7 +37,6 @@ type Item struct {
 type Pixel struct {
 	X, Y   int
 	Mixer  Mixer
-	Error  Mixer
 	Index  int
 	Buffer [1024]Item
 }
@@ -147,14 +146,12 @@ func main() {
 				if pixels == nil {
 					for i := 0; i < 256; i++ {
 						mixer := NewMixer()
-						e := NewMixer()
 						x := rng.Intn(width)
 						y := rng.Intn(height)
 						pixel := Pixel{
 							X:     x,
 							Y:     y,
 							Mixer: mixer,
-							Error: e,
 						}
 						for j := range pixel.Buffer {
 							var vec [256]float32
@@ -170,7 +167,6 @@ func main() {
 							pixel.Buffer[j].Action = byte(rng.Intn(6))
 						}
 						pixel.Mixer.Add(0)
-						pixel.Error.Add(0)
 						pixels = append(pixels, pixel)
 					}
 				}
@@ -184,17 +180,12 @@ func main() {
 							max, index = cs, j
 						}
 					}
-					diff := int(pixels[i].Buffer[index].Next) - int(pixel.Y)
-					if diff < 0 {
-						diff = -diff
-					}
 					pixels[i].Index = (pixels[i].Index + 1) % len(pixels[i].Buffer)
 					pixels[i].Buffer[pixels[i].Index].Vector = query
 					pixels[i].Buffer[pixels[i].Index].Next = pixel.Y
-					inputs = append(inputs, pixels[i].Error.Mix())
+					inputs = append(inputs, pixels[i].Mixer.Mix())
 					indxs = append(indxs, index)
 					pixels[i].Mixer.Add(pixel.Y)
-					pixels[i].Error.Add(byte(diff))
 				}
 				embedding := make([]float32, len(inputs))
 				{
@@ -209,29 +200,17 @@ func main() {
 						embedding[node] = float32(rank)
 					})
 				}
-				distribution := make([]float32, 6)
-				for i := range distribution {
-					distribution[i] = .05
-				}
-				for i := range pixels {
-					distribution[pixels[i].Buffer[indxs[i]].Action] += embedding[i]
-				}
-				sum := float32(0.0)
-				for _, v := range distribution {
-					sum += v
-				}
-				selected, total, index := rng.Float32(), float32(0.0), 0
-				for i, v := range distribution {
-					total += v / sum
-					if selected < total {
-						index = i
-						break
+				max, node := float32(0.0), 0
+				for i, v := range embedding {
+					if v > max {
+						max, node = v, i
 					}
 				}
+				action := pixels[node].Buffer[pixels[node].Index].Action
 				for i := range pixels {
-					pixels[i].Buffer[pixels[i].Index].Action = byte(index)
+					pixels[i].Buffer[pixels[i].Index].Action = action
 				}
-				indexes <- index
+				indexes <- int(action)
 			}
 		}
 
