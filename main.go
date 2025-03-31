@@ -183,7 +183,7 @@ func main() {
 					pixels[i].Index = (pixels[i].Index + 1) % len(pixels[i].Buffer)
 					pixels[i].Buffer[pixels[i].Index].Vector = query
 					pixels[i].Buffer[pixels[i].Index].Next = pixel.Y
-					inputs = append(inputs, pixels[i].Mixer.Mix())
+					inputs = append(inputs, query)
 					indxs = append(indxs, index)
 					pixels[i].Mixer.Add(pixel.Y)
 				}
@@ -206,7 +206,7 @@ func main() {
 						max, node = v, i
 					}
 				}
-				action := pixels[node].Buffer[pixels[node].Index].Action
+				action := pixels[node].Buffer[indxs[node]].Action
 				for i := range pixels {
 					pixels[i].Buffer[pixels[i].Index].Action = action
 				}
