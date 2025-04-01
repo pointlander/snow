@@ -200,17 +200,29 @@ func main() {
 						embedding[node] = float32(rank)
 					})
 				}
-				sum, selected, node := float32(0.0), rng.Float32(), 0
-				for i, v := range embedding {
+				distro := [6]float32{}
+				for i := range pixels {
+					distro[pixels[i].Buffer[indxs[i]].Action] += embedding[i]
+				}
+				for i := range pixels {
+					sum, selected, action := float32(0.0), rng.Float32(), 0
+					for i, v := range distro {
+						sum += v
+						if selected < sum {
+							action = i
+							break
+						}
+					}
+					pixels[i].Buffer[pixels[i].Index].Action = byte(action)
+				}
+
+				sum, selected, action := float32(0.0), rng.Float32(), 0
+				for i, v := range distro {
 					sum += v
 					if selected < sum {
-						node = i
+						action = i
 						break
 					}
-				}
-				action := pixels[node].Buffer[indxs[node]].Action
-				for i := range pixels {
-					pixels[i].Buffer[pixels[i].Index].Action = action
 				}
 				indexes <- int(action)
 			}
