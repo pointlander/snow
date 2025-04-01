@@ -130,7 +130,7 @@ func main() {
 	go camera.Start("/dev/video0")
 
 	mind := func() {
-		indexes, left, right := make(chan int, 8), make(chan Frame, 8), make(chan Frame, 8)
+		indexes, left, right := make(chan [6]float32, 8), make(chan Frame, 8), make(chan Frame, 8)
 		go func() {
 			for img := range camera.Images {
 				left <- img
@@ -216,15 +216,7 @@ func main() {
 					pixels[i].Buffer[pixels[i].Index].Action = byte(action)
 				}
 
-				sum, selected, action := float32(0.0), rng.Float32(), 0
-				for i, v := range distro {
-					sum += v
-					if selected < sum {
-						action = i
-						break
-					}
-				}
-				indexes <- int(action)
+				indexes <- distro
 			}
 		}
 
@@ -232,12 +224,12 @@ func main() {
 		go hemisphere(2, right)
 
 		rng := rand.New(rand.NewSource(1))
-		actions := make([]int, 6)
+		actions := make([]float32, 6)
 		count := 0
 		for index := range indexes {
 			if !*FlagRobot {
 				if count%60 == 0 {
-					sum, selected, index := 0, rng.Intn(60), 0
+					sum, selected, index := float32(0.0), 60*rng.Float32(), 0
 					for i, v := range actions {
 						sum += v
 						actions[i] = 0
@@ -261,11 +253,13 @@ func main() {
 						say <- "none"
 					}
 				} else {
-					actions[index%6]++
+					for i := range index {
+						actions[i] += index[i]
+					}
 				}
 			} else {
 				if count%60 == 0 {
-					sum, selected, index := 0, rng.Intn(60), 0
+					sum, selected, index := float32(0.0), 60*rng.Float32(), 0
 					for i, v := range actions {
 						sum += v
 						actions[i] = 0
@@ -289,7 +283,9 @@ func main() {
 						a = ActionNone
 					}
 				} else {
-					actions[index%6]++
+					for i := range index {
+						actions[i] += index[i]
+					}
 				}
 			}
 			count++
