@@ -231,16 +231,19 @@ func main() {
 		go hemisphere(1, left)
 		go hemisphere(2, right)
 
+		rng := rand.New(rand.NewSource(1))
 		actions := make([]int, 6)
 		count := 0
 		for index := range indexes {
 			if !*FlagRobot {
 				if count%60 == 0 {
-					max, index := 0, 0
+					sum, selected, index := 0, rng.Intn(60), 0
 					for i, v := range actions {
+						sum += v
 						actions[i] = 0
-						if v > max {
-							max, index = v, i
+						if selected < sum {
+							index = i
+							break
 						}
 					}
 					switch index {
@@ -262,11 +265,13 @@ func main() {
 				}
 			} else {
 				if count%60 == 0 {
-					max, index := 0, 0
+					sum, selected, index := 0, rng.Intn(60), 0
 					for i, v := range actions {
+						sum += v
 						actions[i] = 0
-						if v > max {
-							max, index = v, i
+						if selected < sum {
+							index = i
+							break
 						}
 					}
 					switch index {
