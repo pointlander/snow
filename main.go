@@ -200,10 +200,12 @@ func main() {
 						embedding[node] = float32(rank)
 					})
 				}
-				max, node := float32(0.0), 0
+				sum, selected, node := float32(0.0), rng.Float32(), 0
 				for i, v := range embedding {
-					if v > max {
-						max, node = v, i
+					sum += v
+					if selected < sum {
+						node = i
+						break
 					}
 				}
 				action := pixels[node].Buffer[indxs[node]].Action
