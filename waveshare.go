@@ -7,9 +7,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"os"
-	"os/signal"
-	"syscall"
 	"time"
 
 	"github.com/veandco/go-sdl2/sdl"
@@ -20,7 +17,9 @@ var joysticks = make(map[int]*sdl.Joystick)
 
 // Waveshare is a waveshare robot
 type Waveshare struct {
-	Action TypeAction
+	Action  TypeAction
+	Port    serial.Port
+	Running bool
 }
 
 // Init initializes the robot
@@ -28,30 +27,17 @@ func (w *Waveshare) Init() {
 	options := &serial.Mode{
 		BaudRate: 115200,
 	}
-	port, err := serial.Open("/dev/ttyAMA0", options)
+	var err error
+	w.Port, err = serial.Open("/dev/ttyAMA0", options)
 	if err != nil {
 		panic(err)
 	}
-
-	var running bool
-
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-	go func() {
-		<-c
-		err := port.Close()
-		if err != nil {
-			panic(err)
-		}
-		running = false
-		os.Exit(1)
-	}()
 
 	var event sdl.Event
 	sdl.Init(sdl.INIT_JOYSTICK)
 	defer sdl.Quit()
 	sdl.JoystickEventState(sdl.ENABLE)
-	running = true
+	w.Running = true
 	var axis [5]int16
 	joystickLeft := JoystickStateNone
 	joystickRight := JoystickStateNone
@@ -70,12 +56,12 @@ func (w *Waveshare) Init() {
 			panic(err)
 		}
 		data = append(data, '\n')
-		_, err = port.Write(data)
+		_, err = w.Port.Write(data)
 		if err != nil {
 			panic(err)
 		}
 		leftSpeed, rightSpeed := 0.0, 0.0
-		for running {
+		for w.Running {
 			time.Sleep(300 * time.Millisecond)
 			if mode == ModeAuto {
 				switch w.Action {
@@ -108,7 +94,7 @@ func (w *Waveshare) Init() {
 						panic(err)
 					}
 					data = append(data, '\n')
-					_, err = port.Write(data)
+					_, err = w.Port.Write(data)
 					if err != nil {
 						panic(err)
 					}
@@ -145,7 +131,7 @@ func (w *Waveshare) Init() {
 				panic(err)
 			}
 			data = append(data, '\n')
-			_, err = port.Write(data)
+			_, err = w.Port.Write(data)
 			if err != nil {
 				panic(err)
 			}
@@ -153,11 +139,11 @@ func (w *Waveshare) Init() {
 	}()
 
 	go func() {
-		for running {
+		for w.Running {
 			for event = sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
 				switch t := event.(type) {
 				case *sdl.QuitEvent:
-					running = false
+					w.Running = false
 				case *sdl.JoyAxisEvent:
 					value := int16(t.Value)
 					axis[t.Axis] = value
@@ -237,7 +223,7 @@ func (w *Waveshare) Init() {
 							panic(err)
 						}
 						data = append(data, '\n')
-						_, err = port.Write(data)
+						_, err = w.Port.Write(data)
 						if err != nil {
 							panic(err)
 						}
@@ -278,4 +264,13 @@ func (w *Waveshare) Init() {
 // Do does an action
 func (w *Waveshare) Do(action TypeAction) {
 	w.Action = action
+}
+
+// Done the robot is done
+func (w *Waveshare) Done() {
+	err := w.Port.Close()
+	if err != nil {
+		panic(err)
+	}
+	w.Running = false
 }

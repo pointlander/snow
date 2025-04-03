@@ -46,3 +46,8 @@ func (u *Urobot) Do(action TypeAction) {
 		u.Say <- "none"
 	}
 }
+
+// Done the robot is done
+func (u *Urobot) Done() {
+
+}

@@ -7,6 +7,9 @@ package main
 import (
 	"flag"
 	"math/rand"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/pointlander/snow/vector"
 
@@ -85,6 +88,7 @@ const (
 type Robot interface {
 	Init()
 	Do(action TypeAction)
+	Done()
 }
 
 // String returns a string representation of the JoystickState
@@ -251,5 +255,14 @@ func main() {
 	}
 
 	robot.Init()
+
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-c
+		robot.Done()
+		os.Exit(1)
+	}()
+
 	Mind(robot.Do)
 }
