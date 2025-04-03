@@ -295,7 +295,7 @@ func Mind(do func(action TypeAction)) {
 				}
 				pixels[i].Buffer[pixels[i].Index].Action = byte(action)
 			}
-
+			last = img
 			indexes <- distro
 		}
 	}
