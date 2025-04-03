@@ -114,11 +114,14 @@ func Mind(do func(action TypeAction)) {
 
 	go camera.Start("/dev/video0")
 
-	indexes, left, right := make(chan [6]float32, 8), make(chan Frame, 8), make(chan Frame, 8)
+	indexes, left, right, dleft, dright :=
+		make(chan [6]float32, 8), make(chan Frame, 8), make(chan Frame, 8), make(chan Frame, 8), make(chan Frame, 8)
 	go func() {
 		for img := range camera.Images {
 			left <- img
 			right <- img
+			dleft <- img
+			dright <- img
 		}
 	}()
 	hemisphere := func(seed int64, images chan Frame) {
@@ -203,16 +206,111 @@ func Mind(do func(action TypeAction)) {
 			indexes <- distro
 		}
 	}
+	dhemisphere := func(seed int64, images chan Frame) {
+		rng := rand.New(rand.NewSource(seed))
+		var pixels []Pixel
+		var last Frame
+		for img := range images {
+			if last.Frame == nil {
+				last = img
+				continue
+			}
+			width := img.Frame.Bounds().Max.X
+			height := img.Frame.Bounds().Max.Y
+			if pixels == nil {
+				for i := 0; i < 256; i++ {
+					mixer := NewMixer()
+					x := rng.Intn(width)
+					y := rng.Intn(height)
+					pixel := Pixel{
+						X:     x,
+						Y:     y,
+						Mixer: mixer,
+					}
+					for j := range pixel.Buffer {
+						var vec [256]float32
+						for k := range vec {
+							vec[k] = rng.Float32()
+						}
+						scale := sqrt(vector.Dot(vec[:], vec[:]))
+						for k := range vec {
+							vec[k] /= scale
+						}
+						pixel.Buffer[j].Vector = &vec
+						pixel.Buffer[j].Next = byte(rng.Intn(256))
+						pixel.Buffer[j].Action = byte(rng.Intn(6))
+					}
+					pixel.Mixer.Add(0)
+					pixels = append(pixels, pixel)
+				}
+			}
+			inputs, indxs := []*[256]float32{}, []int{}
+			for i := range pixels {
+				lpixel := last.GrayAt(pixels[i].X, pixels[i].Y)
+				pixel := img.GrayAt(pixels[i].X, pixels[i].Y)
+				diff := int(pixel.Y) - int(lpixel.Y)
+				if diff < 0 {
+					diff = -diff
+				}
+				pixel.Y = uint8(diff)
+				query, max, index := pixels[i].Mixer.Mix(), float32(0.0), 0
+				for j := range pixels[i].Buffer {
+					cs := CS(query[:], pixels[i].Buffer[j].Vector[:])
+					if cs > max {
+						max, index = cs, j
+					}
+				}
+				pixels[i].Index = (pixels[i].Index + 1) % len(pixels[i].Buffer)
+				pixels[i].Buffer[pixels[i].Index].Vector = query
+				pixels[i].Buffer[pixels[i].Index].Next = pixel.Y
+				inputs = append(inputs, query)
+				indxs = append(indxs, index)
+				pixels[i].Mixer.Add(pixel.Y)
+			}
+			embedding := make([]float32, len(inputs))
+			{
+				graph := pagerank.NewGraph()
+				for i := 0; i < len(inputs); i++ {
+					for j := 0; j < len(inputs); j++ {
+						p := CS(inputs[i][:], inputs[j][:])
+						graph.Link(uint32(i), uint32(j), float64(p))
+					}
+				}
+				graph.Rank(1.0, 1e-3, func(node uint32, rank float64) {
+					embedding[node] = float32(rank)
+				})
+			}
+			distro := [6]float32{}
+			for i := range pixels {
+				distro[pixels[i].Buffer[indxs[i]].Action] += embedding[i]
+			}
+			for i := range pixels {
+				sum, selected, action := float32(0.0), rng.Float32(), 0
+				for i, v := range distro {
+					sum += v
+					if selected < sum {
+						action = i
+						break
+					}
+				}
+				pixels[i].Buffer[pixels[i].Index].Action = byte(action)
+			}
+			last = img
+			indexes <- distro
+		}
+	}
 
 	go hemisphere(1, left)
 	go hemisphere(2, right)
+	go dhemisphere(1, dleft)
+	go dhemisphere(2, dright)
 
 	rng := rand.New(rand.NewSource(1))
 	actions := make([]float32, 6)
 	count := 0
 	for index := range indexes {
-		if count%60 == 0 {
-			sum, selected, index := float32(0.0), 60*rng.Float32(), 0
+		if count%30 == 0 {
+			sum, selected, index := float32(0.0), 30*rng.Float32(), 0
 			for i, v := range actions {
 				sum += v
 				actions[i] = 0
