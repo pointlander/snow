@@ -33,10 +33,6 @@ func (w *Waveshare) Init() {
 		panic(err)
 	}
 
-	var event sdl.Event
-	sdl.Init(sdl.INIT_JOYSTICK)
-	defer sdl.Quit()
-	sdl.JoystickEventState(sdl.ENABLE)
 	w.Running = true
 	var axis [5]int16
 	joystickLeft := JoystickStateNone
@@ -139,6 +135,10 @@ func (w *Waveshare) Init() {
 	}()
 
 	go func() {
+		var event sdl.Event
+		sdl.Init(sdl.INIT_JOYSTICK)
+		defer sdl.Quit()
+		sdl.JoystickEventState(sdl.ENABLE)
 		for w.Running {
 			for event = sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
 				switch t := event.(type) {
