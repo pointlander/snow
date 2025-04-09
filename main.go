@@ -124,96 +124,7 @@ func Mind(do func(action TypeAction)) {
 			dright <- img
 		}
 	}()
-	hemisphere := func(seed int64, images chan Frame) {
-		rng := rand.New(rand.NewSource(seed))
-		var pixels []Pixel
-		for img := range images {
-			width := img.Frame.Bounds().Max.X
-			height := img.Frame.Bounds().Max.Y
-			if pixels == nil {
-				for i := 0; i < 256; i++ {
-					mixer := NewMixer()
-					x := rng.Intn(width)
-					y := rng.Intn(height)
-					pixel := Pixel{
-						X:     x,
-						Y:     y,
-						Mixer: mixer,
-					}
-					for j := range pixel.Buffer {
-						var vec [256]float32
-						for k := range vec {
-							vec[k] = rng.Float32()
-						}
-						scale := sqrt(vector.Dot(vec[:], vec[:]))
-						for k := range vec {
-							vec[k] /= scale
-						}
-						pixel.Buffer[j].Vector = &vec
-						pixel.Buffer[j].Next = byte(rng.Intn(256))
-						pixel.Buffer[j].Actions[rng.Intn(int(ActionCount))] = 1
-					}
-					pixel.Mixer.Add(0)
-					pixels = append(pixels, pixel)
-				}
-			}
-			inputs, indxs := []*[256]float32{}, []int{}
-			for i := range pixels {
-				pixel := img.GrayAt(pixels[i].X, pixels[i].Y)
-				query, max, index := pixels[i].Mixer.Mix(), float32(0.0), 0
-				for j := range pixels[i].Buffer {
-					cs := CS(query[:], pixels[i].Buffer[j].Vector[:])
-					if cs > max {
-						max, index = cs, j
-					}
-				}
-				pixels[i].Index = (pixels[i].Index + 1) % len(pixels[i].Buffer)
-				pixels[i].Buffer[pixels[i].Index].Vector = query
-				pixels[i].Buffer[pixels[i].Index].Next = pixel.Y
-				inputs = append(inputs, query)
-				indxs = append(indxs, index)
-				pixels[i].Mixer.Add(pixel.Y)
-			}
-			embedding := make([]float32, len(inputs))
-			{
-				graph := pagerank.NewGraph()
-				for i := 0; i < len(inputs); i++ {
-					for j := 0; j < len(inputs); j++ {
-						p := CS(inputs[i][:], inputs[j][:])
-						graph.Link(uint32(i), uint32(j), float64(p))
-					}
-				}
-				graph.Rank(1.0, 1e-3, func(node uint32, rank float64) {
-					embedding[node] = float32(rank)
-				})
-			}
-			distro := [ActionCount]float32{}
-			for i := range pixels {
-				actions, sum := pixels[i].Buffer[indxs[i]].Actions, 0
-				for _, v := range actions {
-					sum += v
-				}
-				for j, v := range actions {
-					distro[j] += float32(v) * embedding[i] / float32(sum)
-				}
-			}
-			for i := range pixels {
-				sum, selected, action := float32(0.0), rng.Float32(), 0
-				for i, v := range distro {
-					sum += v
-					if selected < sum {
-						action = i
-						break
-					}
-				}
-				pixels[i].Buffer[pixels[i].Index].Actions = [ActionCount]int{}
-				pixels[i].Buffer[pixels[i].Index].Actions[action] = 1
-			}
-
-			indexes <- distro
-		}
-	}
-	dhemisphere := func(seed int64, images chan Frame) {
+	hemisphere := func(derivative bool, seed int64, images chan Frame) {
 		rng := rand.New(rand.NewSource(seed))
 		var pixels []Pixel
 		var last Frame
@@ -253,13 +164,15 @@ func Mind(do func(action TypeAction)) {
 			}
 			inputs, indxs := []*[256]float32{}, []int{}
 			for i := range pixels {
-				lpixel := last.GrayAt(pixels[i].X, pixels[i].Y)
 				pixel := img.GrayAt(pixels[i].X, pixels[i].Y)
-				diff := int(pixel.Y) - int(lpixel.Y)
-				if diff < 0 {
-					diff = -diff
+				if derivative {
+					lpixel := last.GrayAt(pixels[i].X, pixels[i].Y)
+					diff := int(pixel.Y) - int(lpixel.Y)
+					if diff < 0 {
+						diff = -diff
+					}
+					pixel.Y = uint8(diff)
 				}
-				pixel.Y = uint8(diff)
 				query, max, index := pixels[i].Mixer.Mix(), float32(0.0), 0
 				for j := range pixels[i].Buffer {
 					cs := CS(query[:], pixels[i].Buffer[j].Vector[:])
@@ -310,15 +223,14 @@ func Mind(do func(action TypeAction)) {
 				pixels[i].Buffer[pixels[i].Index].Actions[action] = 1
 			}
 
-			last = img
 			indexes <- distro
 		}
 	}
 
-	go hemisphere(1, left)
-	go hemisphere(2, right)
-	go dhemisphere(1, dleft)
-	go dhemisphere(2, dright)
+	go hemisphere(false, 1, left)
+	go hemisphere(false, 2, right)
+	go hemisphere(true, 1, dleft)
+	go hemisphere(true, 2, dright)
 
 	rng := rand.New(rand.NewSource(1))
 	actions := make([]float32, ActionCount)
