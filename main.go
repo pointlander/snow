@@ -19,16 +19,24 @@ import (
 // Item is an item in a circular buffer
 type Item struct {
 	Vector  *[256]float32
-	Next    byte
 	Actions [ActionCount]int
+}
+
+// LongTerm is a long term memory bank
+type LongTerm struct {
+	RegisterSet bool
+	Register    Item
+	Index       int
+	Bank        [8]Item
 }
 
 // Pixel is a pixel sensor
 type Pixel struct {
-	X, Y   int
-	Mixer  Mixer
-	Index  int
-	Buffer [1024]Item
+	X, Y     int
+	Mixer    Mixer
+	Index    int
+	Buffer   [1024]Item
+	LongTerm [8]LongTerm
 }
 
 type (
@@ -155,14 +163,27 @@ func Mind(do func(action TypeAction)) {
 							vec[k] /= scale
 						}
 						pixel.Buffer[j].Vector = &vec
-						pixel.Buffer[j].Next = byte(rng.Intn(256))
 						pixel.Buffer[j].Actions[rng.Intn(int(ActionCount))] = 1
+					}
+					for j := range pixel.LongTerm {
+						for k := range pixel.LongTerm[j].Bank {
+							var vec [256]float32
+							for k := range vec {
+								vec[k] = rng.Float32()
+							}
+							scale := sqrt(vector.Dot(vec[:], vec[:]))
+							for k := range vec {
+								vec[k] /= scale
+							}
+							pixel.LongTerm[j].Bank[k].Vector = &vec
+							pixel.LongTerm[j].Bank[k].Actions[rng.Intn(int(ActionCount))] = 1
+						}
 					}
 					pixel.Mixer.Add(0)
 					pixels = append(pixels, pixel)
 				}
 			}
-			inputs, indxs := []*[256]float32{}, []int{}
+			inputs, items := []*[256]float32{}, []*Item{}
 			for i := range pixels {
 				pixel := img.GrayAt(pixels[i].X, pixels[i].Y)
 				if derivative {
@@ -173,18 +194,45 @@ func Mind(do func(action TypeAction)) {
 					}
 					pixel.Y = uint8(diff)
 				}
-				query, max, index := pixels[i].Mixer.Mix(), float32(0.0), 0
+				var found *Item
+				query, max := pixels[i].Mixer.Mix(), float32(0.0)
 				for j := range pixels[i].Buffer {
 					cs := CS(query[:], pixels[i].Buffer[j].Vector[:])
 					if cs > max {
-						max, index = cs, j
+						max, found = cs, &pixels[i].Buffer[j]
+					}
+				}
+				for j := range pixels[i].LongTerm {
+					for k := range pixels[i].LongTerm[j].Bank {
+						cs := CS(query[:], pixels[i].LongTerm[j].Bank[k].Vector[:])
+						if cs > max {
+							max, found = cs, &pixels[i].LongTerm[j].Bank[k]
+						}
 					}
 				}
 				pixels[i].Index = (pixels[i].Index + 1) % len(pixels[i].Buffer)
+				next := pixels[i].Buffer[pixels[i].Index]
+				for j := range pixels[i].LongTerm {
+					if pixels[i].LongTerm[j].RegisterSet {
+						for k := range pixels[i].LongTerm[j].Register.Vector {
+							pixels[i].LongTerm[j].Register.Vector[k] = (pixels[i].LongTerm[j].Register.Vector[k] + next.Vector[k]) / 2
+						}
+						for k := range pixels[i].LongTerm[j].Register.Actions {
+							pixels[i].LongTerm[j].Register.Actions[k] += next.Actions[k]
+						}
+						pixels[i].LongTerm[j].Index = (pixels[i].LongTerm[j].Index + 1) % len(pixels[i].LongTerm[j].Bank)
+						next = pixels[i].LongTerm[j].Bank[pixels[i].LongTerm[j].Index]
+						pixels[i].LongTerm[j].Bank[pixels[i].LongTerm[j].Index] = pixels[i].LongTerm[j].Register
+						pixels[i].LongTerm[j].Register = Item{}
+						pixels[i].LongTerm[j].RegisterSet = false
+					} else {
+						pixels[i].LongTerm[j].Register = next
+						pixels[i].LongTerm[j].RegisterSet = true
+					}
+				}
 				pixels[i].Buffer[pixels[i].Index].Vector = query
-				pixels[i].Buffer[pixels[i].Index].Next = pixel.Y
 				inputs = append(inputs, query)
-				indxs = append(indxs, index)
+				items = append(items, found)
 				pixels[i].Mixer.Add(pixel.Y)
 			}
 			embedding := make([]float32, len(inputs))
@@ -202,7 +250,7 @@ func Mind(do func(action TypeAction)) {
 			}
 			distro := [ActionCount]float32{}
 			for i := range pixels {
-				actions, sum := pixels[i].Buffer[indxs[i]].Actions, 0
+				actions, sum := items[i].Actions, 0
 				for _, v := range actions {
 					sum += v
 				}
