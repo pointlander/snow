@@ -228,6 +228,7 @@ func Mind(do func(action TypeAction)) {
 					} else {
 						pixels[i].LongTerm[j].Register = next
 						pixels[i].LongTerm[j].RegisterSet = true
+						break
 					}
 				}
 				pixels[i].Buffer[pixels[i].Index].Vector = query
