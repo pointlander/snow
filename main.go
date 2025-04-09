@@ -18,9 +18,9 @@ import (
 
 // Item is an item in a circular buffer
 type Item struct {
-	Vector *[256]float32
-	Next   byte
-	Action byte
+	Vector  *[256]float32
+	Next    byte
+	Actions [ActionCount]int
 }
 
 // Pixel is a pixel sensor
@@ -115,7 +115,7 @@ func Mind(do func(action TypeAction)) {
 	go camera.Start("/dev/video0")
 
 	indexes, left, right, dleft, dright :=
-		make(chan [6]float32, 8), make(chan Frame, 8), make(chan Frame, 8), make(chan Frame, 8), make(chan Frame, 8)
+		make(chan [ActionCount]float32, 8), make(chan Frame, 8), make(chan Frame, 8), make(chan Frame, 8), make(chan Frame, 8)
 	go func() {
 		for img := range camera.Images {
 			left <- img
@@ -151,7 +151,7 @@ func Mind(do func(action TypeAction)) {
 						}
 						pixel.Buffer[j].Vector = &vec
 						pixel.Buffer[j].Next = byte(rng.Intn(256))
-						pixel.Buffer[j].Action = byte(rng.Intn(6))
+						pixel.Buffer[j].Actions[rng.Intn(int(ActionCount))] = 1
 					}
 					pixel.Mixer.Add(0)
 					pixels = append(pixels, pixel)
@@ -187,9 +187,15 @@ func Mind(do func(action TypeAction)) {
 					embedding[node] = float32(rank)
 				})
 			}
-			distro := [6]float32{}
+			distro := [ActionCount]float32{}
 			for i := range pixels {
-				distro[pixels[i].Buffer[indxs[i]].Action] += embedding[i]
+				actions, sum := pixels[i].Buffer[indxs[i]].Actions, 0
+				for _, v := range actions {
+					sum += v
+				}
+				for j, v := range actions {
+					distro[j] += float32(v) * embedding[i] / float32(sum)
+				}
 			}
 			for i := range pixels {
 				sum, selected, action := float32(0.0), rng.Float32(), 0
@@ -200,7 +206,8 @@ func Mind(do func(action TypeAction)) {
 						break
 					}
 				}
-				pixels[i].Buffer[pixels[i].Index].Action = byte(action)
+				pixels[i].Buffer[pixels[i].Index].Actions = [ActionCount]int{}
+				pixels[i].Buffer[pixels[i].Index].Actions[action] = 1
 			}
 
 			indexes <- distro
@@ -238,7 +245,7 @@ func Mind(do func(action TypeAction)) {
 						}
 						pixel.Buffer[j].Vector = &vec
 						pixel.Buffer[j].Next = byte(rng.Intn(256))
-						pixel.Buffer[j].Action = byte(rng.Intn(6))
+						pixel.Buffer[j].Actions[rng.Intn(int(ActionCount))] = 1
 					}
 					pixel.Mixer.Add(0)
 					pixels = append(pixels, pixel)
@@ -280,9 +287,15 @@ func Mind(do func(action TypeAction)) {
 					embedding[node] = float32(rank)
 				})
 			}
-			distro := [6]float32{}
+			distro := [ActionCount]float32{}
 			for i := range pixels {
-				distro[pixels[i].Buffer[indxs[i]].Action] += embedding[i]
+				actions, sum := pixels[i].Buffer[indxs[i]].Actions, 0
+				for _, v := range actions {
+					sum += v
+				}
+				for j, v := range actions {
+					distro[j] += float32(v) * embedding[i] / float32(sum)
+				}
 			}
 			for i := range pixels {
 				sum, selected, action := float32(0.0), rng.Float32(), 0
@@ -293,8 +306,10 @@ func Mind(do func(action TypeAction)) {
 						break
 					}
 				}
-				pixels[i].Buffer[pixels[i].Index].Action = byte(action)
+				pixels[i].Buffer[pixels[i].Index].Actions = [ActionCount]int{}
+				pixels[i].Buffer[pixels[i].Index].Actions[action] = 1
 			}
+
 			last = img
 			indexes <- distro
 		}
@@ -306,7 +321,7 @@ func Mind(do func(action TypeAction)) {
 	go dhemisphere(2, dright)
 
 	rng := rand.New(rand.NewSource(1))
-	actions := make([]float32, 6)
+	actions := make([]float32, ActionCount)
 	count := 0
 	for index := range indexes {
 		if count%30 == 0 {
