@@ -2,9 +2,9 @@
 Description=robot service
 
 [Service]
-User=andrew
+User=pointlander
 WorkingDirectory=/home/pointlander/snow/
-ExecStart=/home/pointlander/snow/snow
+ExecStart=/home/pointlander/snow/snow -robot
 Restart=always
 
 [Install]
