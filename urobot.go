@@ -40,8 +40,10 @@ func (u *Urobot) Do(action TypeAction) {
 		u.Say <- "left"
 	case ActionRight:
 		u.Say <- "right"
-	case ActionLight:
-		u.Say <- "light"
+	case ActionLightOn:
+		u.Say <- "light on"
+	case ActionLightOff:
+		u.Say <- "light off"
 	case ActionNone:
 		u.Say <- "none"
 	}

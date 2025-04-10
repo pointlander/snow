@@ -86,8 +86,10 @@ const (
 	ActionBackward
 	// ActionNone
 	ActionNone
-	// ActionLight
-	ActionLight
+	// ActionLightOn
+	ActionLightOn
+	// ActionLightOff
+	ActionLightOff
 	// ActionCount
 	ActionCount
 )
@@ -305,8 +307,10 @@ func Mind(do func(action TypeAction)) {
 			case 3:
 				do(ActionRight)
 			case 4:
-				do(ActionLight)
+				do(ActionLightOn)
 			case 5:
+				do(ActionLightOff)
+			case 6:
 				do(ActionNone)
 			}
 		} else {
