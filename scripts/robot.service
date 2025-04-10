@@ -3,8 +3,8 @@ Description=robot service
 
 [Service]
 User=andrew
-WorkingDirectory=/home/andrew/snow/
-ExecStart=/home/andrew/snow/snow
+WorkingDirectory=/home/pointlander/snow/
+ExecStart=/home/pointlander/snow/snow
 Restart=always
 
 [Install]
