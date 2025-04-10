@@ -39,6 +39,7 @@ func NewJoystick() *Joystick {
 			LightState:    LightStateOff,
 			Speed:         0.1,
 		}
+		var axis [5]int16
 		var event sdl.Event
 		sdl.Init(sdl.INIT_JOYSTICK)
 		defer sdl.Quit()
@@ -50,7 +51,6 @@ func NewJoystick() *Joystick {
 					joystick.Running = false
 				case *sdl.JoyAxisEvent:
 					value := int16(t.Value)
-					var axis [5]int16
 					axis[t.Axis] = value
 					if t.Axis == 3 || t.Axis == 4 {
 						if state.Mode == ModeManual {
