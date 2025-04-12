@@ -104,6 +104,7 @@ func GeneratePacketMotorDuty(duty [4]int32) []byte {
 
 // Turbopi is a turbopi robot
 type Turbopi struct {
+	Last     TypeAction
 	Action   TypeAction
 	Port     serial.Port
 	Running  bool
@@ -172,7 +173,7 @@ func (t *Turbopi) Init() {
 				}
 			}
 
-			{
+			if t.Last != t.Action {
 				message := GeneratePacketMotorDuty([4]int32{
 					int32(rightSpeed), int32(rightSpeed),
 					int32(leftSpeed), int32(leftSpeed)})
@@ -180,6 +181,7 @@ func (t *Turbopi) Init() {
 				if err != nil {
 					panic(err)
 				}
+				t.Last = t.Action
 			}
 		}
 	}()
