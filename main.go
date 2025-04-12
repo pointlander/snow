@@ -115,7 +115,7 @@ func (j JoystickState) String() string {
 
 var (
 	// FlagRobot is the robot mode
-	FlagRobot = flag.Bool("robot", false, "is the robot mode")
+	FlagRobot = flag.String("robot", "urobot", "is the robot mode")
 )
 
 // Mind is a minde
@@ -326,7 +326,9 @@ func main() {
 	flag.Parse()
 
 	var robot Robot
-	if *FlagRobot {
+	if *FlagRobot == "turbopi" {
+		robot = &Turbopi{}
+	} else if *FlagRobot == "waveshare" {
 		robot = &Waveshare{}
 	} else {
 		robot = &Urobot{}

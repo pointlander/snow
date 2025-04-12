@@ -6,6 +6,9 @@ package main
 
 import (
 	"math"
+	"time"
+
+	"go.bug.st/serial"
 )
 
 type (
@@ -97,4 +100,102 @@ func GeneratePacketMotorDuty(duty [4]int32) []byte {
 		}
 	}
 	return GeneratePacket(PacketFuncMotor, data)
+}
+
+// Turbopi is a turbopi robot
+type Turbopi struct {
+	Action   TypeAction
+	Port     serial.Port
+	Running  bool
+	Joystick *Joystick
+}
+
+// Init initializes the robot
+func (t *Turbopi) Init() {
+	options := &serial.Mode{
+		BaudRate: 115200,
+	}
+	var err error
+	t.Port, err = serial.Open("/dev/ttyAMA0", options)
+	if err != nil {
+		panic(err)
+	}
+
+	t.Joystick = NewJoystick()
+
+	t.Running = true
+	go func() {
+		var state Joy
+		tick := time.Tick(300 * time.Millisecond)
+		for t.Running {
+			select {
+			case state = <-t.Joystick.Joy:
+			case <-tick:
+			}
+			leftSpeed, rightSpeed := 0.0, 0.0
+			if state.Mode == ModeAuto {
+				switch t.Action {
+				case ActionForward:
+					leftSpeed = state.Speed
+					rightSpeed = state.Speed
+				case ActionBackward:
+					leftSpeed = -state.Speed
+					rightSpeed = -state.Speed
+				case ActionLeft:
+					leftSpeed = -state.Speed
+					rightSpeed = state.Speed
+				case ActionRight:
+					leftSpeed = state.Speed
+					rightSpeed = -state.Speed
+				case ActionLightOn:
+				case ActionLightOff:
+				case ActionNone:
+					leftSpeed = 0.0
+					rightSpeed = 0.0
+				}
+			} else {
+				switch state.JoystickLeft {
+				case JoystickStateUp:
+					leftSpeed = state.Speed
+				case JoystickStateDown:
+					leftSpeed = -state.Speed
+				case JoystickStateNone:
+					leftSpeed = 0.0
+				}
+				switch state.JoystickRight {
+				case JoystickStateUp:
+					rightSpeed = state.Speed
+				case JoystickStateDown:
+					rightSpeed = -state.Speed
+				case JoystickStateNone:
+					rightSpeed = 0.0
+				}
+			}
+
+			{
+				message := GeneratePacketMotorDuty([4]int32{
+					int32(leftSpeed * 100), int32(leftSpeed * 100),
+					int32(rightSpeed * 100), int32(rightSpeed * 100)})
+				_, err = t.Port.Write(message)
+				if err != nil {
+					panic(err)
+				}
+			}
+		}
+	}()
+}
+
+// Do does an action
+func (t *Turbopi) Do(action TypeAction) {
+	t.Action = action
+}
+
+// Done the robot is done
+func (t *Turbopi) Done() {
+	err := t.Port.Close()
+	if err != nil {
+		panic(err)
+	}
+	t.Joystick.Running = false
+	t.Running = false
 }
