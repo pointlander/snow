@@ -104,7 +104,6 @@ func GeneratePacketMotorDuty(duty [4]int32) []byte {
 
 // Turbopi is a turbopi robot
 type Turbopi struct {
-	Last     TypeAction
 	Action   TypeAction
 	Port     serial.Port
 	Running  bool
@@ -125,26 +124,53 @@ func (t *Turbopi) Init() {
 	t.Joystick = NewJoystick()
 
 	t.Running = true
+	auto, leftSpeed, rightSpeed := false, 0.0, 0.0
 	go func() {
-		var state Joy
+		for t.Running {
+			var state Joy
+			select {
+			case state = <-t.Joystick.Joy:
+			}
+			switch state.JoystickLeft {
+			case JoystickStateUp:
+				leftSpeed = -25
+			case JoystickStateDown:
+				leftSpeed = 25
+			case JoystickStateNone:
+				leftSpeed = 0.0
+			}
+			switch state.JoystickRight {
+			case JoystickStateUp:
+				rightSpeed = 25
+			case JoystickStateDown:
+				rightSpeed = -25
+			case JoystickStateNone:
+				rightSpeed = 0.0
+			}
+			if state.Mode == ModeAuto {
+				auto = true
+			} else {
+				auto = false
+			}
+		}
+	}()
+	go func() {
 		tick := time.Tick(300 * time.Millisecond)
 		for t.Running {
 			select {
-			case state = <-t.Joystick.Joy:
 			case <-tick:
 			}
-			leftSpeed, rightSpeed := 0.0, 0.0
-			if state.Mode == ModeAuto {
+			if auto {
 				switch t.Action {
 				case ActionForward:
-					leftSpeed = -50
-					rightSpeed = -50
+					leftSpeed = -25
+					rightSpeed = -25
 				case ActionBackward:
-					leftSpeed = 50
-					rightSpeed = 50
+					leftSpeed = 25
+					rightSpeed = 25
 				case ActionLeft:
-					leftSpeed = 50
-					rightSpeed = -50
+					leftSpeed = 25
+					rightSpeed = -25
 				case ActionRight:
 					leftSpeed = -50
 					rightSpeed = 50
@@ -154,26 +180,9 @@ func (t *Turbopi) Init() {
 					leftSpeed = 0.0
 					rightSpeed = 0.0
 				}
-			} else {
-				switch state.JoystickLeft {
-				case JoystickStateUp:
-					leftSpeed = -50
-				case JoystickStateDown:
-					leftSpeed = 50
-				case JoystickStateNone:
-					leftSpeed = 0.0
-				}
-				switch state.JoystickRight {
-				case JoystickStateUp:
-					rightSpeed = 50
-				case JoystickStateDown:
-					rightSpeed = -50
-				case JoystickStateNone:
-					rightSpeed = 0.0
-				}
 			}
 
-			if t.Last != t.Action {
+			{
 				message := GeneratePacketMotorDuty([4]int32{
 					int32(rightSpeed), int32(rightSpeed),
 					int32(leftSpeed), int32(leftSpeed)})
@@ -181,7 +190,6 @@ func (t *Turbopi) Init() {
 				if err != nil {
 					panic(err)
 				}
-				t.Last = t.Action
 			}
 		}
 	}()
