@@ -82,7 +82,10 @@ func (vc *V4LCamera) Start(device string) {
 	for i, value := range formats {
 		fmt.Printf("[%d] %s\n", i+1, format_desc[value])
 	}
-	format := formats[1]
+	format := formats[0]
+	for len(formats) > 1 {
+		format = formats[1]
+	}
 
 	fmt.Printf("Supported frame sizes for format %s\n", format_desc[format])
 	frames := FrameSizes(camera.GetSupportedFrameSizes(format))

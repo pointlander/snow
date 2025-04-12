@@ -113,7 +113,7 @@ type Turbopi struct {
 // Init initializes the robot
 func (t *Turbopi) Init() {
 	options := &serial.Mode{
-		BaudRate: 115200,
+		BaudRate: 1000000,
 	}
 	var err error
 	t.Port, err = serial.Open("/dev/ttyAMA0", options)
@@ -136,17 +136,17 @@ func (t *Turbopi) Init() {
 			if state.Mode == ModeAuto {
 				switch t.Action {
 				case ActionForward:
-					leftSpeed = state.Speed
-					rightSpeed = state.Speed
+					leftSpeed = -50
+					rightSpeed = -50
 				case ActionBackward:
-					leftSpeed = -state.Speed
-					rightSpeed = -state.Speed
+					leftSpeed = 50
+					rightSpeed = 50
 				case ActionLeft:
-					leftSpeed = -state.Speed
-					rightSpeed = state.Speed
+					leftSpeed = 50
+					rightSpeed = -50
 				case ActionRight:
-					leftSpeed = state.Speed
-					rightSpeed = -state.Speed
+					leftSpeed = -50
+					rightSpeed = 50
 				case ActionLightOn:
 				case ActionLightOff:
 				case ActionNone:
@@ -156,17 +156,17 @@ func (t *Turbopi) Init() {
 			} else {
 				switch state.JoystickLeft {
 				case JoystickStateUp:
-					leftSpeed = state.Speed
+					leftSpeed = -50
 				case JoystickStateDown:
-					leftSpeed = -state.Speed
+					leftSpeed = 50
 				case JoystickStateNone:
 					leftSpeed = 0.0
 				}
 				switch state.JoystickRight {
 				case JoystickStateUp:
-					rightSpeed = state.Speed
+					rightSpeed = 50
 				case JoystickStateDown:
-					rightSpeed = -state.Speed
+					rightSpeed = -50
 				case JoystickStateNone:
 					rightSpeed = 0.0
 				}
@@ -174,8 +174,8 @@ func (t *Turbopi) Init() {
 
 			{
 				message := GeneratePacketMotorDuty([4]int32{
-					int32(leftSpeed * 100), int32(leftSpeed * 100),
-					int32(rightSpeed * 100), int32(rightSpeed * 100)})
+					int32(rightSpeed), int32(rightSpeed),
+					int32(leftSpeed), int32(leftSpeed)})
 				_, err = t.Port.Write(message)
 				if err != nil {
 					panic(err)
