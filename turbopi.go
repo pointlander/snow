@@ -112,7 +112,7 @@ type Turbopi struct {
 
 // Init initializes the robot
 func (t *Turbopi) Init() {
-	const Speed = 10
+	const Speed = 20
 	options := &serial.Mode{
 		BaudRate: 1000000,
 	}
