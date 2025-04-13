@@ -112,6 +112,7 @@ type Turbopi struct {
 
 // Init initializes the robot
 func (t *Turbopi) Init() {
+	const Speed = 10
 	options := &serial.Mode{
 		BaudRate: 1000000,
 	}
@@ -133,17 +134,17 @@ func (t *Turbopi) Init() {
 			}
 			switch state.JoystickLeft {
 			case JoystickStateUp:
-				leftSpeed = -25
+				leftSpeed = -Speed
 			case JoystickStateDown:
-				leftSpeed = 25
+				leftSpeed = Speed
 			case JoystickStateNone:
 				leftSpeed = 0.0
 			}
 			switch state.JoystickRight {
 			case JoystickStateUp:
-				rightSpeed = 25
+				rightSpeed = Speed
 			case JoystickStateDown:
-				rightSpeed = -25
+				rightSpeed = -Speed
 			case JoystickStateNone:
 				rightSpeed = 0.0
 			}
@@ -163,17 +164,17 @@ func (t *Turbopi) Init() {
 			if auto {
 				switch t.Action {
 				case ActionForward:
-					leftSpeed = -25
-					rightSpeed = -25
+					leftSpeed = -Speed
+					rightSpeed = -Speed
 				case ActionBackward:
-					leftSpeed = 25
-					rightSpeed = 25
+					leftSpeed = Speed
+					rightSpeed = Speed
 				case ActionLeft:
-					leftSpeed = 25
-					rightSpeed = -25
+					leftSpeed = Speed
+					rightSpeed = -Speed
 				case ActionRight:
-					leftSpeed = -50
-					rightSpeed = 50
+					leftSpeed = -Speed
+					rightSpeed = Speed
 				case ActionLightOn:
 				case ActionLightOff:
 				case ActionNone:
