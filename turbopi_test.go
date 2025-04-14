@@ -17,3 +17,14 @@ func TestMotorPacket(t *testing.T) {
 		}
 	}
 }
+
+func testPWMPacket(t *testing.T) {
+	correct := []byte{170, 85, 4, 10, 1, 232, 3, 2, 1, 108, 7, 2, 232, 3, 237}
+	packet := GeneratePacketPWMServoSetPosition(1, [2]uint16{1900, 1000})
+	for i, v := range correct {
+		if packet[i] != v {
+			t.Fatalf("%v != %v", correct, packet)
+		}
+	}
+
+}

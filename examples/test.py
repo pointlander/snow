@@ -3,6 +3,7 @@ import struct
 
 class PacketFunction(enum.IntEnum):
     PACKET_FUNC_MOTOR = 3
+    PACKET_FUNC_PWM_SERVO = 4
 
 crc8_table = [
     0, 94, 188, 226, 97, 63, 221, 131, 194, 156, 126, 32, 163, 253, 31, 65,
@@ -45,3 +46,12 @@ def set_motor_duty(dutys):
     buf_write(PacketFunction.PACKET_FUNC_MOTOR, data)
 
 set_motor_duty([[1, -50], [2, 50], [3, 50], [4, -50]])
+
+def pwm_servo_set_position(duration, positions):
+    duration = int(duration * 1000)
+    data = [0x01, duration & 0xFF, 0xFF & (duration >> 8), len(positions)]
+    for i in positions:
+        data.extend(struct.pack("<BH", i[0], i[1]))
+    buf_write(PacketFunction.PACKET_FUNC_PWM_SERVO, data)
+
+pwm_servo_set_position(1, [[1, 1900], [2, 1000]])

@@ -102,6 +102,19 @@ func GeneratePacketMotorDuty(duty [4]int32) []byte {
 	return GeneratePacket(PacketFuncMotor, data)
 }
 
+// GeneratePacketPWMServoSetPosition sets the servo position
+func GeneratePacketPWMServoSetPosition(duration float32, positions [2]uint16) []byte {
+	_duration := int(duration * 1000)
+	data := []byte{0x01, byte(_duration & 0xFF), byte(0xFF & (_duration >> 8)), byte(len(positions))}
+	for i, d := range positions {
+		data = append(data, byte(i+1))
+		for j := 0; j < 2; j++ {
+			data = append(data, byte(d>>(j*8)))
+		}
+	}
+	return GeneratePacket(PacketFuncPWMServo, data)
+}
+
 // Turbopi is a turbopi robot
 type Turbopi struct {
 	Action   TypeAction
