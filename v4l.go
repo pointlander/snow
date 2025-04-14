@@ -83,7 +83,7 @@ func (vc *V4LCamera) Start(device string) {
 		fmt.Printf("[%d] %s\n", i+1, format_desc[value])
 	}
 	format := formats[0]
-	for len(formats) > 1 {
+	if len(formats) > 1 {
 		format = formats[1]
 	}
 
