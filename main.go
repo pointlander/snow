@@ -90,6 +90,14 @@ const (
 	ActionLightOn
 	// ActionLightOff
 	ActionLightOff
+	// ActionLookUp
+	ActionLookUp
+	// ActionLookDown
+	ActionLookDown
+	// ActionLookLeft
+	ActionLookLeft
+	// ActionLookRight
+	ActionLookRight
 	// ActionCount
 	ActionCount
 )

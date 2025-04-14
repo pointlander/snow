@@ -78,6 +78,7 @@ func (w *Waveshare) Init() {
 				case ActionNone:
 					leftSpeed = 0.0
 					rightSpeed = 0.0
+				default:
 				}
 			} else {
 				switch state.JoystickLeft {

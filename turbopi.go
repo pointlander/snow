@@ -139,6 +139,7 @@ func (t *Turbopi) Init() {
 
 	t.Running = true
 	auto, leftSpeed, rightSpeed := false, 0.0, 0.0
+	azimuth, elevation := 1500, 1500
 	go func() {
 		for t.Running {
 			var state Joy
@@ -160,6 +161,16 @@ func (t *Turbopi) Init() {
 				rightSpeed = -Speed
 			case JoystickStateNone:
 				rightSpeed = 0.0
+			}
+			if state.Azimuth > 0 && azimuth < 2000 {
+				azimuth += state.Azimuth
+			} else if state.Azimuth < 0 && azimuth > 1000 {
+				azimuth += state.Azimuth
+			}
+			if state.Elevation > 0 && elevation < 2000 {
+				elevation += state.Elevation
+			} else if state.Elevation < 0 && elevation > 1000 {
+				elevation += state.Elevation
 			}
 			if state.Mode == ModeAuto {
 				auto = true
@@ -190,6 +201,44 @@ func (t *Turbopi) Init() {
 					rightSpeed = Speed
 				case ActionLightOn:
 				case ActionLightOff:
+				case ActionLookUp:
+					if elevation < 2000 {
+						elevation += 100
+					}
+					message := GeneratePacketPWMServoSetPosition(1, [2]uint16{uint16(azimuth), uint16(elevation)})
+					_, err = t.Port.Write(message)
+					if err != nil {
+						panic(err)
+					}
+				case ActionLookDown:
+					if elevation > 1000 {
+						elevation -= 100
+					}
+					message := GeneratePacketPWMServoSetPosition(1, [2]uint16{uint16(azimuth), uint16(elevation)})
+					_, err = t.Port.Write(message)
+					if err != nil {
+						panic(err)
+					}
+
+				case ActionLookLeft:
+					if azimuth < 2000 {
+						azimuth += 100
+					}
+					message := GeneratePacketPWMServoSetPosition(1, [2]uint16{uint16(azimuth), uint16(elevation)})
+					_, err = t.Port.Write(message)
+					if err != nil {
+						panic(err)
+					}
+
+				case ActionLookRight:
+					if azimuth > 1000 {
+						azimuth -= 100
+					}
+					message := GeneratePacketPWMServoSetPosition(1, [2]uint16{uint16(azimuth), uint16(elevation)})
+					_, err = t.Port.Write(message)
+					if err != nil {
+						panic(err)
+					}
 				case ActionNone:
 					leftSpeed = 0.0
 					rightSpeed = 0.0

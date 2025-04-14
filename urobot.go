@@ -44,6 +44,14 @@ func (u *Urobot) Do(action TypeAction) {
 		u.Say <- "light on"
 	case ActionLightOff:
 		u.Say <- "light off"
+	case ActionLookUp:
+		u.Say <- "look up"
+	case ActionLookDown:
+		u.Say <- "look down"
+	case ActionLookLeft:
+		u.Say <- "look left"
+	case ActionLookRight:
+		u.Say <- "look right"
 	case ActionNone:
 		u.Say <- "none"
 	}
