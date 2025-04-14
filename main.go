@@ -319,6 +319,14 @@ func Mind(do func(action TypeAction)) {
 			case 5:
 				do(ActionLightOff)
 			case 6:
+				do(ActionLookUp)
+			case 7:
+				do(ActionLookDown)
+			case 8:
+				do(ActionLookLeft)
+			case 9:
+				do(ActionLookRight)
+			case 10:
 				do(ActionNone)
 			}
 		} else {
