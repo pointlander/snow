@@ -296,38 +296,21 @@ func Mind(do func(action TypeAction)) {
 	count := 0
 	for index := range indexes {
 		if count%30 == 0 {
-			sum, selected, index := float32(0.0), 30*rng.Float32(), 0
+			s := float32(0.0)
+			for _, v := range actions {
+				s += v
+			}
+			sum, selected, index := float32(0.0), rng.Float32(), 0
 			for i, v := range actions {
-				sum += v
-				actions[i] = 0
+				sum += v / s
 				if selected < sum {
 					index = i
 					break
 				}
 			}
-			switch index {
-			case 0:
-				do(ActionForward)
-			case 1:
-				do(ActionBackward)
-			case 2:
-				do(ActionLeft)
-			case 3:
-				do(ActionRight)
-			case 4:
-				do(ActionLightOn)
-			case 5:
-				do(ActionLightOff)
-			case 6:
-				do(ActionLookUp)
-			case 7:
-				do(ActionLookDown)
-			case 8:
-				do(ActionLookLeft)
-			case 9:
-				do(ActionLookRight)
-			case 10:
-				do(ActionNone)
+			do(TypeAction(index))
+			for i := range actions {
+				actions[i] = 0
 			}
 		} else {
 			for i := range index {
