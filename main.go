@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/pointlander/snow/vector"
 
@@ -293,9 +294,9 @@ func Mind(do func(action TypeAction)) {
 
 	rng := rand.New(rand.NewSource(1))
 	actions := make([]float32, ActionCount)
-	count := 0
+	mark := time.Now()
 	for index := range indexes {
-		if count%30 == 0 {
+		if time.Since(mark) > time.Second {
 			s := float32(0.0)
 			for _, v := range actions {
 				s += v
@@ -312,12 +313,12 @@ func Mind(do func(action TypeAction)) {
 			for i := range actions {
 				actions[i] = 0
 			}
+			mark = time.Now()
 		} else {
 			for i := range index {
 				actions[i] += index[i]
 			}
 		}
-		count++
 	}
 }
 
