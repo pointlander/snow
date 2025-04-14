@@ -2,6 +2,7 @@
 * [mark 3 video](https://youtu.be/qC5WNuGszUw)
 * [mark 4 video](https://youtu.be/cyQ_-_T5reM)
 * [mark 5 video](https://youtu.be/da3Z3qmaqIs)
+* [mark 6 video](https://youtu.be/8r7WHS9NU7g)
 # Install
 ```sh
 apt-get install libv4l-dev libasound2-dev libsdl2-dev
