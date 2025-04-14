@@ -40,8 +40,8 @@ func NewJoystick() *Joystick {
 			JoystickRight: JoystickStateNone,
 			LightState:    LightStateOff,
 			Speed:         0.1,
-			Azimuth:       1500,
-			Elevation:     1500,
+			Azimuth:       0,
+			Elevation:     0,
 		}
 		var axis [5]int16
 		var event sdl.Event
@@ -125,16 +125,19 @@ func NewJoystick() *Joystick {
 						t.Timestamp, t.Hat, t.Value)
 					if t.Value == 1 {
 						// up
-						state.Elevation = 100
+						state.Elevation = -100
 					} else if t.Value == 4 {
 						// down
-						state.Elevation = -100
+						state.Elevation = 100
 					} else if t.Value == 8 {
 						// left
-						state.Azimuth = -100
+						state.Azimuth = 100
 					} else if t.Value == 2 {
 						// right
-						state.Azimuth = 100
+						state.Azimuth = -100
+					} else {
+						state.Elevation = 0
+						state.Azimuth = 0
 					}
 				case *sdl.JoyDeviceAddedEvent:
 					fmt.Println(t.Which)

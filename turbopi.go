@@ -139,7 +139,7 @@ func (t *Turbopi) Init() {
 
 	t.Running = true
 	auto, leftSpeed, rightSpeed := false, 0.0, 0.0
-	azimuth, elevation := 1500, 1500
+	azimuth, elevation := 1800, 1500
 	go func() {
 		for t.Running {
 			var state Joy
@@ -205,39 +205,17 @@ func (t *Turbopi) Init() {
 					if elevation < 2000 {
 						elevation += 100
 					}
-					message := GeneratePacketPWMServoSetPosition(1, [2]uint16{uint16(azimuth), uint16(elevation)})
-					_, err = t.Port.Write(message)
-					if err != nil {
-						panic(err)
-					}
 				case ActionLookDown:
 					if elevation > 1000 {
 						elevation -= 100
 					}
-					message := GeneratePacketPWMServoSetPosition(1, [2]uint16{uint16(azimuth), uint16(elevation)})
-					_, err = t.Port.Write(message)
-					if err != nil {
-						panic(err)
-					}
-
 				case ActionLookLeft:
 					if azimuth < 2000 {
 						azimuth += 100
 					}
-					message := GeneratePacketPWMServoSetPosition(1, [2]uint16{uint16(azimuth), uint16(elevation)})
-					_, err = t.Port.Write(message)
-					if err != nil {
-						panic(err)
-					}
-
 				case ActionLookRight:
 					if azimuth > 1000 {
 						azimuth -= 100
-					}
-					message := GeneratePacketPWMServoSetPosition(1, [2]uint16{uint16(azimuth), uint16(elevation)})
-					_, err = t.Port.Write(message)
-					if err != nil {
-						panic(err)
 					}
 				case ActionNone:
 					leftSpeed = 0.0
@@ -250,6 +228,14 @@ func (t *Turbopi) Init() {
 					int32(rightSpeed), int32(rightSpeed),
 					int32(leftSpeed), int32(leftSpeed)})
 				_, err = t.Port.Write(message)
+				if err != nil {
+					panic(err)
+				}
+			}
+			time.Sleep(200 * time.Millisecond)
+			{
+				message := GeneratePacketPWMServoSetPosition(1, [2]uint16{uint16(elevation), uint16(azimuth)})
+				_, err := t.Port.Write(message)
 				if err != nil {
 					panic(err)
 				}
