@@ -226,7 +226,7 @@ func Mind(do func(action TypeAction)) {
 				for j := range pixels[i].LongTerm {
 					if pixels[i].LongTerm[j].RegisterSet {
 						for k := range pixels[i].LongTerm[j].Register.Vector {
-							pixels[i].LongTerm[j].Register.Vector[k] = (pixels[i].LongTerm[j].Register.Vector[k] + next.Vector[k]) / 2
+							pixels[i].LongTerm[j].Register.Vector[k] = (pixels[i].LongTerm[j].Register.Vector[k] + next.Vector[k])
 						}
 						for k := range pixels[i].LongTerm[j].Register.Actions {
 							pixels[i].LongTerm[j].Register.Actions[k] += next.Actions[k]

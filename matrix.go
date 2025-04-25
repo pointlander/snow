@@ -213,6 +213,6 @@ func SelfEntropy(input Matrix, output []float32) {
 
 // CS is float32 cosine similarity
 func CS(a []float32, b []float32) float32 {
-	ab := vector.Dot(a, b)
-	return ab
+	ab, aa, bb := vector.Dot(a, b), vector.Dot(a, a), vector.Dot(b, b)
+	return ab / (sqrt(aa) + sqrt(bb))
 }
