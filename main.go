@@ -6,15 +6,37 @@ package main
 
 import (
 	"flag"
+	"fmt"
+	"math"
 	"math/rand"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
+	"github.com/pointlander/gradient/tf32"
 	"github.com/pointlander/snow/vector"
 
 	"github.com/alixaxel/pagerank"
+)
+
+const (
+	// B1 exponential decay of the rate for the first moment estimates
+	B1 = 0.8
+	// B2 exponential decay rate for the second-moment estimates
+	B2 = 0.89
+	// Eta is the learning rate
+	Eta = 1.0e-3
+)
+
+const (
+	// StateM is the state for the mean
+	StateM = iota
+	// StateV is the state for the variance
+	StateV
+	// StateTotal is the total number of states
+	StateTotal
 )
 
 // Item is an item in a circular buffer
@@ -322,6 +344,190 @@ func Mind(do func(action TypeAction)) {
 	}
 }
 
+// AutoEncoder is an autoencoder
+type AutoEncoder struct {
+	Set tf32.Set
+	Rng *rand.Rand
+}
+
+// NewAutoEncoder creates a new autoencoder
+func NewAutoEncoder() *AutoEncoder {
+	a := AutoEncoder{
+		Rng: rand.New(rand.NewSource(1)),
+	}
+	set := tf32.NewSet()
+	set.Add("l1", 8*8, 8*8)
+	set.Add("b1", 8*8, 1)
+	set.Add("l2", 8*8, 8*8)
+	set.Add("b2", 8*8, 1)
+
+	for i := range set.Weights {
+		w := set.Weights[i]
+		if strings.HasPrefix(w.N, "b") {
+			w.X = w.X[:cap(w.X)]
+			w.States = make([][]float32, StateTotal)
+			for ii := range w.States {
+				w.States[ii] = make([]float32, len(w.X))
+			}
+			continue
+		}
+		factor := math.Sqrt(2.0 / float64(w.S[0]))
+		for range cap(w.X) {
+			w.X = append(w.X, float32(a.Rng.NormFloat64()*factor))
+		}
+		w.States = make([][]float32, StateTotal)
+		for ii := range w.States {
+			w.States[ii] = make([]float32, len(w.X))
+		}
+	}
+
+	a.Set = set
+	return &a
+}
+
+// Measure measures the loss
+func (a *AutoEncoder) Measure(input []float32) float32 {
+	others := tf32.NewSet()
+	others.Add("input", 8*8, 1)
+	in := others.ByName["input"]
+	for _, value := range input {
+		in.X = append(in.X, value)
+	}
+
+	l1 := tf32.Add(tf32.Mul(a.Set.Get("l1"), others.Get("input")), a.Set.Get("b1"))
+	l2 := tf32.Add(tf32.Mul(a.Set.Get("l2"), l1), a.Set.Get("b2"))
+	loss := tf32.Quadratic(l2, others.Get("input"))
+
+	a.Set.Zero()
+	others.Zero()
+	return tf32.Gradient(loss).X[0]
+}
+
+// Encode encodes
+func (a *AutoEncoder) Encode(input []float32) float32 {
+	others := tf32.NewSet()
+	others.Add("input", 8*8, 1)
+	in := others.ByName["input"]
+	for _, value := range input {
+		in.X = append(in.X, value)
+	}
+
+	l1 := tf32.Add(tf32.Mul(a.Set.Get("l1"), others.Get("input")), a.Set.Get("b1"))
+	l2 := tf32.Add(tf32.Mul(a.Set.Get("l2"), l1), a.Set.Get("b2"))
+	loss := tf32.Quadratic(l2, others.Get("input"))
+
+	l := float32(0.0)
+	for i := 0; i < 8; i++ {
+		pow := func(x float64) float64 {
+			y := math.Pow(x, float64(i+1))
+			if math.IsNaN(y) || math.IsInf(y, 0) {
+				return 0
+			}
+			return y
+		}
+
+		a.Set.Zero()
+		others.Zero()
+		l = tf32.Gradient(loss).X[0]
+		if math.IsNaN(float64(l)) || math.IsInf(float64(l), 0) {
+			fmt.Println(i, l)
+			break
+		}
+
+		norm := 0.0
+		for _, p := range a.Set.Weights {
+			for _, d := range p.D {
+				norm += float64(d * d)
+			}
+		}
+		norm = math.Sqrt(norm)
+		b1, b2 := pow(B1), pow(B2)
+		scaling := 1.0
+		if norm > 1 {
+			scaling = 1 / norm
+		}
+		for _, w := range a.Set.Weights {
+			if w.N != "A" {
+				continue
+			}
+			for ii, d := range w.D {
+				g := d * float32(scaling)
+				m := B1*w.States[StateM][ii] + (1-B1)*g
+				v := B2*w.States[StateV][ii] + (1-B2)*g*g
+				w.States[StateM][ii] = m
+				w.States[StateV][ii] = v
+				mhat := m / (1 - float32(b1))
+				vhat := v / (1 - float32(b2))
+				if vhat < 0 {
+					vhat = 0
+				}
+				w.X[ii] -= Eta * mhat / (float32(math.Sqrt(float64(vhat))) + 1e-8)
+			}
+		}
+	}
+	return l
+}
+
+// AutoEncoderMind is a minde
+func AutoEncoderMind(do func(action TypeAction)) {
+	camera := NewV4LCamera()
+	encoder := NewAutoEncoder()
+
+	go camera.Start("/dev/video0")
+
+	for img := range camera.Images {
+		width := img.Frame.Bounds().Max.X
+		height := img.Frame.Bounds().Max.Y
+		line1, line2 := width/3, 2*width/3
+		var l [3]float32
+		var p [3][][]float32
+		for i := 0; i < 128; i++ {
+			x := encoder.Rng.Intn(width - 8)
+			y := encoder.Rng.Intn(height - 8)
+			pixels := make([]float32, 8*8)
+			for yy := 0; yy < 8; yy++ {
+				for xx := 0; xx < 8; xx++ {
+					pixel := img.GrayAt(x+xx, y+yy)
+					pixels[yy*8+xx] = float32(pixel.Y)
+				}
+			}
+			loss := encoder.Measure(pixels)
+			if x < line1 {
+				l[0] += loss
+				p[0] = append(p[0], pixels)
+			} else if x > line1 && x < line2 {
+				l[1] += loss
+				p[1] = append(p[1], pixels)
+			} else {
+				l[2] += loss
+				p[2] = append(p[2], pixels)
+			}
+		}
+		max, index := float32(0.0), 0
+		for ii, value := range l {
+			if value > max {
+				max, index = value, ii
+			}
+		}
+		if index == 0 {
+			do(ActionLeft)
+			for _, pixels := range p[0] {
+				encoder.Encode(pixels)
+			}
+		} else if index == 1 {
+			do(ActionForward)
+			for _, pixels := range p[1] {
+				encoder.Encode(pixels)
+			}
+		} else {
+			do(ActionRight)
+			for _, pixels := range p[2] {
+				encoder.Encode(pixels)
+			}
+		}
+	}
+}
+
 func main() {
 	flag.Parse()
 
@@ -344,5 +550,6 @@ func main() {
 		os.Exit(1)
 	}()
 
-	Mind(robot.Do)
+	//Mind(robot.Do)
+	AutoEncoderMind(robot.Do)
 }
