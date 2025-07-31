@@ -398,9 +398,12 @@ func (a *AutoEncoder) Measure(input []float32) float32 {
 	l2 := tf32.Add(tf32.Mul(a.Set.Get("l2"), l1), a.Set.Get("b2"))
 	loss := tf32.Quadratic(l2, others.Get("input"))
 
-	a.Set.Zero()
-	others.Zero()
-	return tf32.Gradient(loss).X[0]
+	l := float32(0.0)
+	loss(func(a *tf32.V) bool {
+		l = a.X[0]
+		return true
+	})
+	return l
 }
 
 // Encode encodes
