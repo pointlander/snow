@@ -392,12 +392,12 @@ func (a *AutoEncoder) Measure(input [][]float32) float32 {
 	in := others.ByName["input"]
 	for _, row := range input {
 		for _, value := range row {
-			in.X = append(in.X, value)
+			in.X = append(in.X, value/255.0)
 		}
 	}
 
-	l1 := tf32.Add(tf32.Mul(a.Set.Get("l1"), others.Get("input")), a.Set.Get("b1"))
-	l2 := tf32.Add(tf32.Mul(a.Set.Get("l2"), l1), a.Set.Get("b2"))
+	l1 := tf32.Sigmoid(tf32.Add(tf32.Mul(a.Set.Get("l1"), others.Get("input")), a.Set.Get("b1")))
+	l2 := tf32.Sigmoid(tf32.Add(tf32.Mul(a.Set.Get("l2"), l1), a.Set.Get("b2")))
 	loss := tf32.Sum(tf32.Quadratic(l2, others.Get("input")))
 
 	l := float32(0.0)
@@ -415,12 +415,12 @@ func (a *AutoEncoder) Encode(input [][]float32) float32 {
 	in := others.ByName["input"]
 	for _, row := range input {
 		for _, value := range row {
-			in.X = append(in.X, value)
+			in.X = append(in.X, value/255.0)
 		}
 	}
 
-	l1 := tf32.Add(tf32.Mul(a.Set.Get("l1"), others.Get("input")), a.Set.Get("b1"))
-	l2 := tf32.Add(tf32.Mul(a.Set.Get("l2"), l1), a.Set.Get("b2"))
+	l1 := tf32.Sigmoid(tf32.Add(tf32.Mul(a.Set.Get("l1"), others.Get("input")), a.Set.Get("b1")))
+	l2 := tf32.Sigmoid(tf32.Add(tf32.Mul(a.Set.Get("l2"), l1), a.Set.Get("b2")))
 	loss := tf32.Avg(tf32.Quadratic(l2, others.Get("input")))
 
 	l := float32(0.0)
