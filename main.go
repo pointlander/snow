@@ -386,17 +386,19 @@ func NewAutoEncoder() *AutoEncoder {
 }
 
 // Measure measures the loss
-func (a *AutoEncoder) Measure(input []float32) float32 {
+func (a *AutoEncoder) Measure(input [][]float32) float32 {
 	others := tf32.NewSet()
-	others.Add("input", 8*8, 1)
+	others.Add("input", 8*8, len(input))
 	in := others.ByName["input"]
-	for _, value := range input {
-		in.X = append(in.X, value)
+	for _, row := range input {
+		for _, value := range row {
+			in.X = append(in.X, value)
+		}
 	}
 
 	l1 := tf32.Add(tf32.Mul(a.Set.Get("l1"), others.Get("input")), a.Set.Get("b1"))
 	l2 := tf32.Add(tf32.Mul(a.Set.Get("l2"), l1), a.Set.Get("b2"))
-	loss := tf32.Quadratic(l2, others.Get("input"))
+	loss := tf32.Sum(tf32.Quadratic(l2, others.Get("input")))
 
 	l := float32(0.0)
 	loss(func(a *tf32.V) bool {
@@ -407,17 +409,19 @@ func (a *AutoEncoder) Measure(input []float32) float32 {
 }
 
 // Encode encodes
-func (a *AutoEncoder) Encode(input []float32) float32 {
+func (a *AutoEncoder) Encode(input [][]float32) float32 {
 	others := tf32.NewSet()
-	others.Add("input", 8*8, 1)
+	others.Add("input", 8*8, len(input))
 	in := others.ByName["input"]
-	for _, value := range input {
-		in.X = append(in.X, value)
+	for _, row := range input {
+		for _, value := range row {
+			in.X = append(in.X, value)
+		}
 	}
 
 	l1 := tf32.Add(tf32.Mul(a.Set.Get("l1"), others.Get("input")), a.Set.Get("b1"))
 	l2 := tf32.Add(tf32.Mul(a.Set.Get("l2"), l1), a.Set.Get("b2"))
-	loss := tf32.Quadratic(l2, others.Get("input"))
+	loss := tf32.Avg(tf32.Quadratic(l2, others.Get("input")))
 
 	l := float32(0.0)
 	for i := 0; i < 8; i++ {
@@ -494,17 +498,16 @@ func AutoEncoderMind(do func(action TypeAction)) {
 					pixels[yy*8+xx] = float32(pixel.Y)
 				}
 			}
-			loss := encoder.Measure(pixels)
 			if x < line1 {
-				l[0] += loss
 				p[0] = append(p[0], pixels)
 			} else if x > line1 && x < line2 {
-				l[1] += loss
 				p[1] = append(p[1], pixels)
 			} else {
-				l[2] += loss
 				p[2] = append(p[2], pixels)
 			}
+		}
+		for i := range l {
+			l[i] += encoder.Measure(p[i])
 		}
 		max, index := float32(0.0), 0
 		for ii, value := range l {
@@ -514,19 +517,13 @@ func AutoEncoderMind(do func(action TypeAction)) {
 		}
 		if index == 0 {
 			do(ActionLeft)
-			for _, pixels := range p[0] {
-				encoder.Encode(pixels)
-			}
+			encoder.Encode(p[0])
 		} else if index == 1 {
 			do(ActionForward)
-			for _, pixels := range p[1] {
-				encoder.Encode(pixels)
-			}
+			encoder.Encode(p[1])
 		} else {
 			do(ActionRight)
-			for _, pixels := range p[2] {
-				encoder.Encode(pixels)
-			}
+			encoder.Encode(p[2])
 		}
 	}
 }
