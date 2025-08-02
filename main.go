@@ -454,9 +454,6 @@ func (a *AutoEncoder) Encode(input [][]float32) float32 {
 			scaling = 1 / norm
 		}
 		for _, w := range a.Set.Weights {
-			if w.N != "A" {
-				continue
-			}
 			for ii, d := range w.D {
 				g := d * float32(scaling)
 				m := B1*w.States[StateM][ii] + (1-B1)*g
@@ -478,19 +475,21 @@ func (a *AutoEncoder) Encode(input [][]float32) float32 {
 // AutoEncoderMind is a minde
 func AutoEncoderMind(do func(action TypeAction)) {
 	camera := NewV4LCamera()
-	encoder := NewAutoEncoder()
+	rng := rand.New(rand.NewSource(1))
+	encoder0 := NewAutoEncoder()
+	encoder1 := NewAutoEncoder()
+	encoder2 := NewAutoEncoder()
 
 	go camera.Start("/dev/video0")
 
 	for img := range camera.Images {
 		width := img.Frame.Bounds().Max.X
 		height := img.Frame.Bounds().Max.Y
-		line1, line2 := width/3, 2*width/3
 		var l [3]float32
-		var p [3][][]float32
+		var p [][]float32
 		for i := 0; i < 128; i++ {
-			x := encoder.Rng.Intn(width - 8)
-			y := encoder.Rng.Intn(height - 8)
+			x := rng.Intn(width - 8)
+			y := rng.Intn(height - 8)
 			pixels := make([]float32, 8*8)
 			for yy := 0; yy < 8; yy++ {
 				for xx := 0; xx < 8; xx++ {
@@ -498,32 +497,32 @@ func AutoEncoderMind(do func(action TypeAction)) {
 					pixels[yy*8+xx] = float32(pixel.Y)
 				}
 			}
-			if x < line1 {
-				p[0] = append(p[0], pixels)
-			} else if x > line1 && x < line2 {
-				p[1] = append(p[1], pixels)
-			} else {
-				p[2] = append(p[2], pixels)
-			}
+			p = append(p, pixels)
 		}
-		for i := range l {
-			l[i] += encoder.Measure(p[i])
+		l[0] = encoder0.Measure(p)
+		l[1] = encoder1.Measure(p)
+		l[2] = encoder2.Measure(p)
+		total := float32(0.0)
+		for _, value := range l {
+			total += value
 		}
-		max, index := float32(0.0), 0
+		sum, selected, index := float32(0.0), rng.Float32(), 0
 		for ii, value := range l {
-			if value > max {
-				max, index = value, ii
+			sum += value / total
+			if selected < sum {
+				index = ii
+				break
 			}
 		}
 		if index == 0 {
 			do(ActionLeft)
-			encoder.Encode(p[0])
+			encoder0.Encode(p)
 		} else if index == 1 {
 			do(ActionForward)
-			encoder.Encode(p[1])
+			encoder1.Encode(p)
 		} else {
 			do(ActionRight)
-			encoder.Encode(p[2])
+			encoder2.Encode(p)
 		}
 	}
 }
