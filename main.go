@@ -386,7 +386,7 @@ func NewAutoEncoder() *AutoEncoder {
 }
 
 // Measure measures the loss
-func (a *AutoEncoder) Measure(input [][]float32) float32 {
+func (a *AutoEncoder) Measure(input *[128][]float32) float32 {
 	others := tf32.NewSet()
 	others.Add("input", 8*8, len(input))
 	in := others.ByName["input"]
@@ -409,7 +409,7 @@ func (a *AutoEncoder) Measure(input [][]float32) float32 {
 }
 
 // Encode encodes
-func (a *AutoEncoder) Encode(input [][]float32) float32 {
+func (a *AutoEncoder) Encode(input *[128][]float32) float32 {
 	others := tf32.NewSet()
 	others.Add("input", 8*8, len(input))
 	in := others.ByName["input"]
@@ -476,14 +476,15 @@ func (a *AutoEncoder) Encode(input [][]float32) float32 {
 func AutoEncoderMind(do func(action TypeAction)) {
 	camera := NewV4LCamera()
 	rng := rand.New(rand.NewSource(1))
+	const actions = 5
 	type Auto struct {
 		Auto   *AutoEncoder
 		Action TypeAction
 	}
-	var auto [3]Auto
+	var auto [actions]Auto
 	for i := range auto {
-		auto[0].Auto = NewAutoEncoder()
-		auto[0].Action = TypeAction(i)
+		auto[i].Auto = NewAutoEncoder()
+		auto[i].Action = TypeAction(i)
 	}
 
 	go camera.Start("/dev/video0")
@@ -491,9 +492,9 @@ func AutoEncoderMind(do func(action TypeAction)) {
 	for img := range camera.Images {
 		width := img.Frame.Bounds().Max.X
 		height := img.Frame.Bounds().Max.Y
-		var l [3]float32
-		var p [][]float32
-		for i := 0; i < 128; i++ {
+		var l [actions]float32
+		var p [128][]float32
+		for i := range p {
 			x := rng.Intn(width - 8)
 			y := rng.Intn(height - 8)
 			pixels := make([]float32, 8*8)
@@ -503,10 +504,10 @@ func AutoEncoderMind(do func(action TypeAction)) {
 					pixels[yy*8+xx] = float32(pixel.Y)
 				}
 			}
-			p = append(p, pixels)
+			p[i] = pixels
 		}
 		for i := range auto {
-			l[i] = auto[i].Auto.Measure(p)
+			l[i] = auto[i].Auto.Measure(&p)
 		}
 		total := float32(0.0)
 		for _, value := range l {
@@ -521,7 +522,7 @@ func AutoEncoderMind(do func(action TypeAction)) {
 			}
 		}
 		do(auto[index].Action)
-		auto[index].Auto.Encode(p)
+		auto[index].Auto.Encode(&p)
 	}
 }
 
