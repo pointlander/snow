@@ -513,15 +513,24 @@ func AutoEncoderMind(do func(action TypeAction)) {
 		for _, value := range l {
 			total += value
 		}
-		sum, selected, index := float32(0.0), rng.Float32(), 0
+		sum, selected, index, total1 := float32(0.0), rng.Float32(), 0, float32(0.0)
 		for ii, value := range l {
+			total1 += 1.0 - value/total
 			sum += value / total
 			if selected < sum {
 				index = ii
 				break
 			}
 		}
-		do(auto[index].Action)
+		sum, selected, index1 := float32(0.0), rng.Float32(), 0
+		for ii, value := range l {
+			sum += (1.0 - value/total) / total1
+			if selected < sum {
+				index1 = ii
+				break
+			}
+		}
+		do(auto[index1].Action)
 		auto[index].Auto.Encode(&p)
 	}
 }
