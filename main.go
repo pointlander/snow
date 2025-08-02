@@ -454,9 +454,6 @@ func (a *AutoEncoder) Encode(input [][]float32) float32 {
 			scaling = 1 / norm
 		}
 		for _, w := range a.Set.Weights {
-			if w.N != "A" {
-				continue
-			}
 			for ii, d := range w.D {
 				g := d * float32(scaling)
 				m := B1*w.States[StateM][ii] + (1-B1)*g
@@ -505,10 +502,16 @@ func AutoEncoderMind(do func(action TypeAction)) {
 		l[0] = encoder0.Measure(p)
 		l[1] = encoder1.Measure(p)
 		l[2] = encoder2.Measure(p)
-		max, index := float32(0.0), 0
+		total := float32(0.0)
+		for _, value := range l {
+			total += value
+		}
+		sum, selected, index := float32(0.0), rng.Float32(), 0
 		for ii, value := range l {
-			if value > max {
-				max, index = value, ii
+			sum += value / total
+			if selected < sum {
+				index = ii
+				break
 			}
 		}
 		if index == 0 {
