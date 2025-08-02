@@ -476,9 +476,15 @@ func (a *AutoEncoder) Encode(input [][]float32) float32 {
 func AutoEncoderMind(do func(action TypeAction)) {
 	camera := NewV4LCamera()
 	rng := rand.New(rand.NewSource(1))
-	encoder0 := NewAutoEncoder()
-	encoder1 := NewAutoEncoder()
-	encoder2 := NewAutoEncoder()
+	type Auto struct {
+		Auto   *AutoEncoder
+		Action TypeAction
+	}
+	var auto [3]Auto
+	for i := range auto {
+		auto[0].Auto = NewAutoEncoder()
+		auto[0].Action = TypeAction(i)
+	}
 
 	go camera.Start("/dev/video0")
 
@@ -499,9 +505,9 @@ func AutoEncoderMind(do func(action TypeAction)) {
 			}
 			p = append(p, pixels)
 		}
-		l[0] = encoder0.Measure(p)
-		l[1] = encoder1.Measure(p)
-		l[2] = encoder2.Measure(p)
+		for i := range auto {
+			l[i] = auto[i].Auto.Measure(p)
+		}
 		total := float32(0.0)
 		for _, value := range l {
 			total += value
@@ -514,16 +520,8 @@ func AutoEncoderMind(do func(action TypeAction)) {
 				break
 			}
 		}
-		if index == 0 {
-			do(ActionLeft)
-			encoder0.Encode(p)
-		} else if index == 1 {
-			do(ActionForward)
-			encoder1.Encode(p)
-		} else {
-			do(ActionRight)
-			encoder2.Encode(p)
-		}
+		do(auto[index].Action)
+		auto[index].Auto.Encode(p)
 	}
 }
 
