@@ -487,8 +487,11 @@ func AutoEncoderMind(do func(action TypeAction)) {
 		auto[i].Action = TypeAction(i)
 	}
 
+	var votes [actions]uint
+
 	go camera.Start("/dev/video0")
 
+	iteration := 0
 	for img := range camera.Images {
 		width := img.Frame.Bounds().Max.X
 		height := img.Frame.Bounds().Max.Y
@@ -541,8 +544,19 @@ func AutoEncoderMind(do func(action TypeAction)) {
 				min, index1 = value, ii
 			}
 		}
-		do(auto[index1].Action)
+		votes[index1]++
+		if iteration%8 == 0 {
+			max, index := uint(0), 0
+			for ii, value := range votes {
+				if value > max {
+					max, index = value, ii
+				}
+				votes[ii] = 0
+			}
+			do(auto[index].Action)
+		}
 		auto[index].Auto.Encode(&p)
+		iteration++
 	}
 }
 
