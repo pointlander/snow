@@ -509,7 +509,7 @@ func AutoEncoderMind(do func(action TypeAction)) {
 		for i := range auto {
 			l[i] = auto[i].Auto.Measure(&p)
 		}
-		total := float32(0.0)
+		/*total := float32(0.0)
 		for _, value := range l {
 			total += value
 		}
@@ -531,6 +531,14 @@ func AutoEncoderMind(do func(action TypeAction)) {
 			}
 		}
 		do(auto[index1].Action)
+		auto[index].Auto.Encode(&p)*/
+		max, index := float32(0.0), 0
+		for ii, value := range l {
+			if value > max {
+				max, index = value, ii
+			}
+		}
+		do(auto[index].Action)
 		auto[index].Auto.Encode(&p)
 	}
 }
