@@ -545,7 +545,7 @@ func AutoEncoderMind(do func(action TypeAction)) {
 			}
 		}
 		votes[index1]++
-		if iteration%8 == 0 {
+		if iteration%15 == 0 {
 			max, index := uint(0), 0
 			for ii, value := range votes {
 				if value > max {
