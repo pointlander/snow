@@ -532,13 +532,16 @@ func AutoEncoderMind(do func(action TypeAction)) {
 		}
 		do(auto[index1].Action)
 		auto[index].Auto.Encode(&p)*/
-		max, index := float32(0.0), 0
+		min, max, index, index1 := float32(math.MaxFloat32), float32(0.0), 0, 0
 		for ii, value := range l {
 			if value > max {
 				max, index = value, ii
 			}
+			if value < min {
+				min, index1 = value, ii
+			}
 		}
-		do(auto[index].Action)
+		do(auto[index1].Action)
 		auto[index].Auto.Encode(&p)
 	}
 }
