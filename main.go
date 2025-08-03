@@ -346,8 +346,9 @@ func Mind(do func(action TypeAction)) {
 
 // AutoEncoder is an autoencoder
 type AutoEncoder struct {
-	Set tf32.Set
-	Rng *rand.Rand
+	Set       tf32.Set
+	Rng       *rand.Rand
+	Iteration int
 }
 
 // NewAutoEncoder creates a new autoencoder
@@ -408,6 +409,14 @@ func (a *AutoEncoder) Measure(input *[128][]float32) float32 {
 	return l
 }
 
+func (a *AutoEncoder) pow(x float64) float64 {
+	y := math.Pow(x, float64(a.Iteration+1))
+	if math.IsNaN(y) || math.IsInf(y, 0) {
+		return 0
+	}
+	return y
+}
+
 // Encode encodes
 func (a *AutoEncoder) Encode(input *[128][]float32) float32 {
 	others := tf32.NewSet()
@@ -424,51 +433,42 @@ func (a *AutoEncoder) Encode(input *[128][]float32) float32 {
 	loss := tf32.Avg(tf32.Quadratic(l2, others.Get("input")))
 
 	l := float32(0.0)
-	for i := 0; i < 8; i++ {
-		pow := func(x float64) float64 {
-			y := math.Pow(x, float64(i+1))
-			if math.IsNaN(y) || math.IsInf(y, 0) {
-				return 0
-			}
-			return y
-		}
+	a.Set.Zero()
+	others.Zero()
+	l = tf32.Gradient(loss).X[0]
+	if math.IsNaN(float64(l)) || math.IsInf(float64(l), 0) {
+		fmt.Println(a.Iteration, l)
+		return 0
+	}
 
-		a.Set.Zero()
-		others.Zero()
-		l = tf32.Gradient(loss).X[0]
-		if math.IsNaN(float64(l)) || math.IsInf(float64(l), 0) {
-			fmt.Println(i, l)
-			break
-		}
-
-		norm := 0.0
-		for _, p := range a.Set.Weights {
-			for _, d := range p.D {
-				norm += float64(d * d)
-			}
-		}
-		norm = math.Sqrt(norm)
-		b1, b2 := pow(B1), pow(B2)
-		scaling := 1.0
-		if norm > 1 {
-			scaling = 1 / norm
-		}
-		for _, w := range a.Set.Weights {
-			for ii, d := range w.D {
-				g := d * float32(scaling)
-				m := B1*w.States[StateM][ii] + (1-B1)*g
-				v := B2*w.States[StateV][ii] + (1-B2)*g*g
-				w.States[StateM][ii] = m
-				w.States[StateV][ii] = v
-				mhat := m / (1 - float32(b1))
-				vhat := v / (1 - float32(b2))
-				if vhat < 0 {
-					vhat = 0
-				}
-				w.X[ii] -= Eta * mhat / (float32(math.Sqrt(float64(vhat))) + 1e-8)
-			}
+	norm := 0.0
+	for _, p := range a.Set.Weights {
+		for _, d := range p.D {
+			norm += float64(d * d)
 		}
 	}
+	norm = math.Sqrt(norm)
+	b1, b2 := a.pow(B1), a.pow(B2)
+	scaling := 1.0
+	if norm > 1 {
+		scaling = 1 / norm
+	}
+	for _, w := range a.Set.Weights {
+		for ii, d := range w.D {
+			g := d * float32(scaling)
+			m := B1*w.States[StateM][ii] + (1-B1)*g
+			v := B2*w.States[StateV][ii] + (1-B2)*g*g
+			w.States[StateM][ii] = m
+			w.States[StateV][ii] = v
+			mhat := m / (1 - float32(b1))
+			vhat := v / (1 - float32(b2))
+			if vhat < 0 {
+				vhat = 0
+			}
+			w.X[ii] -= Eta * mhat / (float32(math.Sqrt(float64(vhat))) + 1e-8)
+		}
+	}
+	a.Iteration++
 	return l
 }
 
