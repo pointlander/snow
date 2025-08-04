@@ -17,7 +17,7 @@ import (
 
 // Frame is a video frame
 type Frame struct {
-	Frame *image.YCbCr
+	Frame image.Image
 }
 
 // GrayAt returns the gray byte at
