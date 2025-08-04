@@ -18,7 +18,9 @@ import (
 	"github.com/pointlander/gradient/tf32"
 	"github.com/pointlander/snow/vector"
 
+	"github.com/AndreRenaud/gore"
 	"github.com/alixaxel/pagerank"
+	"github.com/hajimehoshi/ebiten/v2"
 )
 
 const (
@@ -147,6 +149,10 @@ func (j JoystickState) String() string {
 var (
 	// FlagRobot is the robot mode
 	FlagRobot = flag.String("robot", "urobot", "is the robot mode")
+	// FlagDoom doom mode
+	FlagDoom = flag.Bool("doom", false, "doom mode")
+	// iwad
+	FlagIwad = flag.String("iwad", "", "iwad")
 )
 
 // Mind is a minde
@@ -476,11 +482,6 @@ func (a *AutoEncoder) Encode(input *[128][]float32) float32 {
 func AutoEncoderMind(do func(action TypeAction)) {
 	camera := NewV4LCamera()
 	rng := rand.New(rand.NewSource(1))
-	const actions = 5
-	type Auto struct {
-		Auto   *AutoEncoder
-		Action TypeAction
-	}
 	var auto [actions]Auto
 	for i := range auto {
 		auto[i].Auto = NewAutoEncoder()
@@ -581,6 +582,28 @@ func main() {
 		robot.Done()
 		os.Exit(1)
 	}()
+
+	if *FlagDoom {
+		game := &DoomGame{}
+		game.rng = rand.New(rand.NewSource(1))
+		for i := range game.auto {
+			game.auto[i].Auto = NewAutoEncoder()
+			game.auto[i].Action = TypeAction(i)
+		}
+		game.last = ActionCount
+		ebiten.SetWindowSize(screenWidth, screenHeight)
+		ebiten.SetWindowTitle("Gamepad (Ebitengine Demo)")
+		ebiten.SetFullscreen(true)
+		go func() {
+			gore.Run(game, []string{"-iwad", *FlagIwad})
+			game.terminating = true
+		}()
+		if err := ebiten.RunGame(game); err != nil {
+			panic(err)
+		}
+
+		return
+	}
 
 	//Mind(robot.Do)
 	AutoEncoderMind(robot.Do)
