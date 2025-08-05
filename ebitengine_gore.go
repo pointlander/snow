@@ -31,6 +31,7 @@ type DoomGame struct {
 	lock        sync.Mutex
 	terminating bool
 
+	autoMode  bool
 	rng       *rand.Rand
 	auto      [actions]Auto
 	votes     [actions]uint
@@ -75,6 +76,26 @@ func (g *DoomGame) Update() error {
 	}
 	g.lock.Lock()
 	defer g.lock.Unlock()
+	if inpututil.IsKeyJustPressed(ebiten.KeyK) {
+		g.autoMode = !g.autoMode
+		if !g.autoMode && g.last != ActionCount {
+			var event gore.DoomEvent
+			event.Type = gore.Ev_keyup
+			switch g.last {
+			case ActionLeft:
+				event.Key = gore.KEY_LEFTARROW1
+			case ActionRight:
+				event.Key = gore.KEY_RIGHTARROW1
+			case ActionForward:
+				event.Key = gore.KEY_UPARROW1
+			case ActionBackward:
+				event.Key = gore.KEY_DOWNARROW1
+			case ActionNone:
+			}
+			g.events = append(g.events, event)
+			g.last = ActionCount
+		}
+	}
 	for key, doomKey := range keys {
 		if inpututil.IsKeyJustPressed(key) {
 			var event gore.DoomEvent
@@ -179,7 +200,7 @@ func (g *DoomGame) DrawFrame(frame *image.RGBA) {
 			}
 			g.votes[ii] = 0
 		}
-		if g.last != ActionCount {
+		if g.autoMode && g.last != ActionCount {
 			var event gore.DoomEvent
 			event.Type = gore.Ev_keyup
 			switch g.last {
@@ -195,7 +216,7 @@ func (g *DoomGame) DrawFrame(frame *image.RGBA) {
 			}
 			g.events = append(g.events, event)
 		}
-		{
+		if g.autoMode {
 			var event gore.DoomEvent
 			event.Type = gore.Ev_keydown
 			switch g.auto[index].Action {
