@@ -489,6 +489,12 @@ func AutoEncoderMind(frames chan Frame, do func(action TypeAction)) {
 
 	var votes [actions]uint
 
+	img := <-frames
+	width := img.Frame.Bounds().Max.X
+	height := img.Frame.Bounds().Max.Y
+	w, h := width/8, height/8
+	fmt.Println(width, height, w, h, w*h)
+
 	iteration := 0
 	for img := range frames {
 		width := img.Frame.Bounds().Max.X
