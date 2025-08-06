@@ -479,8 +479,7 @@ func (a *AutoEncoder) Encode(input *[128][]float32) float32 {
 }
 
 // AutoEncoderMind is a minde
-func AutoEncoderMind(do func(action TypeAction)) {
-	camera := NewV4LCamera()
+func AutoEncoderMind(frames chan Frame, do func(action TypeAction)) {
 	rng := rand.New(rand.NewSource(1))
 	var auto [actions]Auto
 	for i := range auto {
@@ -490,10 +489,8 @@ func AutoEncoderMind(do func(action TypeAction)) {
 
 	var votes [actions]uint
 
-	go camera.Start("/dev/video0")
-
 	iteration := 0
-	for img := range camera.Images {
+	for img := range frames {
 		width := img.Frame.Bounds().Max.X
 		height := img.Frame.Bounds().Max.Y
 		var l [actions]float32
@@ -585,19 +582,74 @@ func main() {
 
 	if *FlagDoom {
 		game := &DoomGame{}
-		game.rng = rand.New(rand.NewSource(1))
-		for i := range game.auto {
-			game.auto[i].Auto = NewAutoEncoder()
-			game.auto[i].Action = TypeAction(i)
+		last, autoMode := ActionCount, false
+		game.frames = make(chan Frame, 8)
+		game.autoMode = func() {
+			autoMode = !autoMode
+			if !autoMode && last != ActionCount {
+				var event gore.DoomEvent
+				event.Type = gore.Ev_keyup
+				switch last {
+				case ActionLeft:
+					event.Key = gore.KEY_LEFTARROW1
+				case ActionRight:
+					event.Key = gore.KEY_RIGHTARROW1
+				case ActionForward:
+					event.Key = gore.KEY_UPARROW1
+				case ActionBackward:
+					event.Key = gore.KEY_DOWNARROW1
+				case ActionNone:
+				}
+				game.events = append(game.events, event)
+				last = ActionCount
+			}
+
 		}
-		game.last = ActionCount
 		ebiten.SetWindowSize(screenWidth, screenHeight)
 		ebiten.SetWindowTitle("Gamepad (Ebitengine Demo)")
 		ebiten.SetFullscreen(true)
+		do := func(action TypeAction) {
+			game.lock.Lock()
+			defer game.lock.Unlock()
+			if autoMode && last != ActionCount {
+				var event gore.DoomEvent
+				event.Type = gore.Ev_keyup
+				switch last {
+				case ActionLeft:
+					event.Key = gore.KEY_LEFTARROW1
+				case ActionRight:
+					event.Key = gore.KEY_RIGHTARROW1
+				case ActionForward:
+					event.Key = gore.KEY_UPARROW1
+				case ActionBackward:
+					event.Key = gore.KEY_DOWNARROW1
+				case ActionNone:
+				}
+				game.events = append(game.events, event)
+			}
+			if autoMode {
+				var event gore.DoomEvent
+				event.Type = gore.Ev_keydown
+				switch action {
+				case ActionLeft:
+					event.Key = gore.KEY_LEFTARROW1
+				case ActionRight:
+					event.Key = gore.KEY_RIGHTARROW1
+				case ActionForward:
+					event.Key = gore.KEY_UPARROW1
+				case ActionBackward:
+					event.Key = gore.KEY_DOWNARROW1
+				case ActionNone:
+				}
+				game.events = append(game.events, event)
+			}
+			last = action
+		}
 		go func() {
 			gore.Run(game, []string{"-iwad", *FlagIwad})
 			game.terminating = true
 		}()
+		go AutoEncoderMind(game.frames, do)
 		if err := ebiten.RunGame(game); err != nil {
 			panic(err)
 		}
@@ -606,5 +658,7 @@ func main() {
 	}
 
 	//Mind(robot.Do)
-	AutoEncoderMind(robot.Do)
+	camera := NewV4LCamera()
+	go camera.Start("/dev/video0")
+	AutoEncoderMind(camera.Images, robot.Do)
 }

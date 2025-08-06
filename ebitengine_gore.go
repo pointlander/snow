@@ -2,9 +2,6 @@ package main
 
 import (
 	"image"
-	"image/color"
-	"math"
-	"math/rand"
 	"sync"
 
 	"github.com/AndreRenaud/gore"
@@ -31,12 +28,8 @@ type DoomGame struct {
 	lock        sync.Mutex
 	terminating bool
 
-	autoMode  bool
-	rng       *rand.Rand
-	auto      [actions]Auto
-	votes     [actions]uint
-	last      TypeAction
-	iteration int
+	frames   chan Frame
+	autoMode func()
 }
 
 func (g *DoomGame) Update() error {
@@ -77,24 +70,7 @@ func (g *DoomGame) Update() error {
 	g.lock.Lock()
 	defer g.lock.Unlock()
 	if inpututil.IsKeyJustPressed(ebiten.KeyK) {
-		g.autoMode = !g.autoMode
-		if !g.autoMode && g.last != ActionCount {
-			var event gore.DoomEvent
-			event.Type = gore.Ev_keyup
-			switch g.last {
-			case ActionLeft:
-				event.Key = gore.KEY_LEFTARROW1
-			case ActionRight:
-				event.Key = gore.KEY_RIGHTARROW1
-			case ActionForward:
-				event.Key = gore.KEY_UPARROW1
-			case ActionBackward:
-				event.Key = gore.KEY_DOWNARROW1
-			case ActionNone:
-			}
-			g.events = append(g.events, event)
-			g.last = ActionCount
-		}
+		g.autoMode()
 	}
 	for key, doomKey := range keys {
 		if inpututil.IsKeyJustPressed(key) {
@@ -163,80 +139,7 @@ func (g *DoomGame) DrawFrame(frame *image.RGBA) {
 	g.lock.Lock()
 	defer g.lock.Unlock()
 
-	width := frame.Bounds().Max.X
-	height := frame.Bounds().Max.Y
-	var l [actions]float32
-	var p [128][]float32
-	for i := range p {
-		x := g.rng.Intn(width - 8)
-		y := g.rng.Intn(height - 8)
-		pixels := make([]float32, 8*8)
-		for yy := 0; yy < 8; yy++ {
-			for xx := 0; xx < 8; xx++ {
-				pixel := color.GrayModel.Convert(frame.At(x+xx, y+yy)).(color.Gray)
-				pixels[yy*8+xx] = float32(pixel.Y)
-			}
-		}
-		p[i] = pixels
-	}
-	for i := range g.auto {
-		l[i] = g.auto[i].Auto.Measure(&p)
-	}
-	min, max, index, index1 := float32(math.MaxFloat32), float32(0.0), 0, 0
-	for ii, value := range l {
-		if value > max {
-			max, index = value, ii
-		}
-		if value < min {
-			min, index1 = value, ii
-		}
-	}
-	g.votes[index1]++
-	if g.iteration%30 == 0 {
-		max, index := uint(0), 0
-		for ii, value := range g.votes {
-			if value > max {
-				max, index = value, ii
-			}
-			g.votes[ii] = 0
-		}
-		if g.autoMode && g.last != ActionCount {
-			var event gore.DoomEvent
-			event.Type = gore.Ev_keyup
-			switch g.last {
-			case ActionLeft:
-				event.Key = gore.KEY_LEFTARROW1
-			case ActionRight:
-				event.Key = gore.KEY_RIGHTARROW1
-			case ActionForward:
-				event.Key = gore.KEY_UPARROW1
-			case ActionBackward:
-				event.Key = gore.KEY_DOWNARROW1
-			case ActionNone:
-			}
-			g.events = append(g.events, event)
-		}
-		if g.autoMode {
-			var event gore.DoomEvent
-			event.Type = gore.Ev_keydown
-			switch g.auto[index].Action {
-			case ActionLeft:
-				event.Key = gore.KEY_LEFTARROW1
-			case ActionRight:
-				event.Key = gore.KEY_RIGHTARROW1
-			case ActionForward:
-				event.Key = gore.KEY_UPARROW1
-			case ActionBackward:
-				event.Key = gore.KEY_DOWNARROW1
-			case ActionNone:
-			}
-			g.events = append(g.events, event)
-		}
-		g.last = g.auto[index].Action
-	}
-	g.auto[index].Auto.Encode(&p)
-	g.iteration++
-
+	g.frames <- Frame{frame}
 	if g.lastFrame != nil {
 		if g.lastFrame.Bounds().Dx() != frame.Bounds().Dx() || g.lastFrame.Bounds().Dy() != frame.Bounds().Dy() {
 			g.lastFrame.Deallocate()
