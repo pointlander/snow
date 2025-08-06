@@ -516,29 +516,6 @@ func AutoEncoderMind(frames chan Frame, do func(action TypeAction)) {
 		for i := range auto {
 			l[i] = auto[i].Auto.Measure(&p)
 		}
-		/*total := float32(0.0)
-		for _, value := range l {
-			total += value
-		}
-		sum, selected, index, total1 := float32(0.0), rng.Float32(), 0, float32(0.0)
-		for ii, value := range l {
-			total1 += 1.0 - value/total
-			sum += value / total
-			if selected < sum {
-				index = ii
-				break
-			}
-		}
-		sum, selected, index1 := float32(0.0), rng.Float32(), 0
-		for ii, value := range l {
-			sum += (1.0 - value/total) / total1
-			if selected < sum {
-				index1 = ii
-				break
-			}
-		}
-		do(auto[index1].Action)
-		auto[index].Auto.Encode(&p)*/
 		min, max, index, index1 := float32(math.MaxFloat32), float32(0.0), 0, 0
 		for ii, value := range l {
 			if value > max {
