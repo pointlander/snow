@@ -417,17 +417,22 @@ func (a *AutoEncoder) Measure(input *[128][]float32) float32 {
 }
 
 // Measure measures the loss of a single input
-func (a *AutoEncoder) MeasureSingle(input []float32) float32 {
+func (a *AutoEncoder) MeasureSingle(input, output []float32) float32 {
 	others := tf32.NewSet()
 	others.Add("input", 8*8, 1)
+	others.Add("output", 8*8, 1)
 	in := others.ByName["input"]
 	for _, value := range input {
 		in.X = append(in.X, value/255.0)
 	}
+	out := others.ByName["output"]
+	for _, value := range output {
+		out.X = append(out.X, value)
+	}
 
 	l1 := tf32.Sigmoid(tf32.Add(tf32.Mul(a.Set.Get("l1"), others.Get("input")), a.Set.Get("b1")))
 	l2 := tf32.Sigmoid(tf32.Add(tf32.Mul(a.Set.Get("l2"), l1), a.Set.Get("b2")))
-	loss := tf32.Sum(tf32.Quadratic(l2, others.Get("input")))
+	loss := tf32.Sum(tf32.Quadratic(l2, others.Get("output")))
 
 	l := float32(0.0)
 	loss(func(a *tf32.V) bool {
@@ -501,17 +506,22 @@ func (a *AutoEncoder) Encode(input *[128][]float32) float32 {
 }
 
 // Encode encodes a single input
-func (a *AutoEncoder) EncodeSingle(input []float32) float32 {
+func (a *AutoEncoder) EncodeSingle(input, output []float32) float32 {
 	others := tf32.NewSet()
-	others.Add("input", 8*8, len(input))
+	others.Add("input", 8*8, 1)
+	others.Add("output", 8*8, 1)
 	in := others.ByName["input"]
 	for _, value := range input {
-		in.X = append(in.X, value/255.0)
+		in.X = append(in.X, value)
+	}
+	out := others.ByName["output"]
+	for _, value := range output {
+		out.X = append(out.X, value)
 	}
 
 	l1 := tf32.Sigmoid(tf32.Add(tf32.Mul(a.Set.Get("l1"), others.Get("input")), a.Set.Get("b1")))
 	l2 := tf32.Sigmoid(tf32.Add(tf32.Mul(a.Set.Get("l2"), l1), a.Set.Get("b2")))
-	loss := tf32.Avg(tf32.Quadratic(l2, others.Get("input")))
+	loss := tf32.Avg(tf32.Quadratic(l2, others.Get("output")))
 
 	l := float32(0.0)
 	a.Set.Zero()
@@ -639,18 +649,33 @@ func AutoEncoderMindMach2(frames chan Frame, do func(action TypeAction)) {
 	for img := range frames {
 		width := img.Frame.Bounds().Max.X
 		height := img.Frame.Bounds().Max.Y
-		pixels := make([][]float32, 0, 8)
+		type Patch struct {
+			Input  []float32
+			Output []float32
+		}
+		pixels := make([]Patch, 0, 8)
 		mask, s := make(map[int]bool), 0
 		for y := 0; y < height-8; y += 8 {
 			for x := 0; x < width-8; x += 8 {
-				pix := make([]float32, 8*8)
+				input, output := make([]float32, 8*8), make([]float32, 8*8)
 				for yy := 0; yy < 8; yy++ {
 					for xx := 0; xx < 8; xx++ {
-						pixel := img.GrayAt(x+xx, y+yy)
-						pix[yy*8+xx] = float32(pixel.Y)
+						pixel := float32(img.GrayAt(x+xx, y+yy).Y) / 255
+						output[yy*8+xx] = pixel
+						pixel += float32(rng.NormFloat64() / 8)
+						if pixel < 0 {
+							pixel = 0
+						}
+						if pixel > 1 {
+							pixel = 1
+						}
+						input[yy*8+xx] = pixel
 					}
 				}
-				pixels = append(pixels, pix)
+				pixels = append(pixels, Patch{
+					Input:  input,
+					Output: output,
+				})
 				if rng.Intn(8) == 0 {
 					mask[s] = true
 				}
@@ -659,15 +684,14 @@ func AutoEncoderMindMach2(frames chan Frame, do func(action TypeAction)) {
 		}
 
 		done := make(chan int, 8)
-		measure := func(i int, seed int64) {
-			//rng := rand.New(rand.NewSource(seed))
+		measure := func(i int) {
 			if !mask[i] {
 				done <- -1
 				return
 			}
 			min, max, minIndex, maxIndex := float32(math.MaxFloat32), float32(0), 0, 0
 			for ii := range auto[i] {
-				value := auto[i][ii].Auto.MeasureSingle(pixels[i])
+				value := auto[i][ii].Auto.MeasureSingle(pixels[i].Input, pixels[i].Output)
 				if value < min {
 					min, minIndex = value, ii
 				}
@@ -675,35 +699,12 @@ func AutoEncoderMindMach2(frames chan Frame, do func(action TypeAction)) {
 					max, maxIndex = value, ii
 				}
 			}
-			/*sum, measures := float32(0.0), make([]float32, 0, 8)
-			for ii := range auto[i] {
-				value := auto[i][ii].Auto.MeasureSingle(pixels[i])
-				sum += value
-				measures = append(measures, value)
-			}
-			total, sum1, selected, max := float32(0.0), float32(0.0), rng.Float32(), 0
-			for ii, value := range measures {
-				total += value / sum
-				sum1 += (1 - value/sum)
-				if selected < total {
-					max = ii
-					break
-				}
-			}
-			total, selected, min := float32(0.0), rng.Float32(), 0
-			for ii, value := range measures {
-				total += (1 - value/sum) / sum1
-				if selected < total {
-					min = ii
-					break
-				}
-			}*/
-			auto[i][maxIndex].Auto.EncodeSingle(pixels[i])
+			auto[i][maxIndex].Auto.EncodeSingle(pixels[i].Input, pixels[i].Output)
 			done <- minIndex
 		}
 		index, flight, cpus := 0, 0, runtime.NumCPU()
 		for index < len(pixels) && flight < cpus {
-			go measure(index, rng.Int63())
+			go measure(index)
 			flight++
 			index++
 		}
@@ -714,7 +715,7 @@ func AutoEncoderMindMach2(frames chan Frame, do func(action TypeAction)) {
 			}
 			flight--
 
-			go measure(index, rng.Int63())
+			go measure(index)
 			flight++
 			index++
 		}
@@ -734,67 +735,6 @@ func AutoEncoderMindMach2(frames chan Frame, do func(action TypeAction)) {
 			}
 			go do(TypeAction(action))
 		}
-		/*min, max, minIndex, maxIndex := uint(math.MaxUint), uint(0), 0, 0
-		for ii, value := range votes {
-			if value > max {
-				max, maxIndex = value, ii
-			}
-			if value < min {
-				min, minIndex = value, ii
-			}
-			votes[ii] = 0
-		}
-		minIndex, maxIndex := 0, 0
-		sum := uint(0)
-		for _, value := range votes {
-			sum += value
-		}
-		total, selected := uint(0), uint(rng.Intn(int(sum)))
-		for i, value := range votes {
-			total += value
-			if selected < total {
-				maxIndex = i
-				break
-			}
-		}
-		ssum := uint(0)
-		for _, value := range votes {
-			ssum += sum - value
-		}
-		total, selected = uint(0), uint(rng.Intn(int(ssum)))
-		for i, value := range votes {
-			total += sum - value
-			if selected < total {
-				minIndex = i
-				break
-			}
-		}*/
-
-		/*encode := func(i int) {
-			if !mask[i] {
-				done <- -1
-				return
-			}
-			auto[i][minIndex].Auto.EncodeSingle(pixels[i])
-			done <- -1
-		}
-		index, flight, cpus = 0, 0, runtime.NumCPU()
-		for index < len(pixels) && flight < cpus {
-			go encode(index)
-			flight++
-			index++
-		}
-		for index < len(pixels) {
-			<-done
-			flight--
-
-			go encode(index)
-			flight++
-			index++
-		}
-		for range flight {
-			<-done
-		}*/
 
 		iteration++
 	}
