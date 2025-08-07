@@ -11,6 +11,7 @@ import (
 	"math/rand"
 	"os"
 	"os/signal"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -415,6 +416,27 @@ func (a *AutoEncoder) Measure(input *[128][]float32) float32 {
 	return l
 }
 
+// Measure measures the loss of a single input
+func (a *AutoEncoder) MeasureSingle(input []float32) float32 {
+	others := tf32.NewSet()
+	others.Add("input", 8*8, 1)
+	in := others.ByName["input"]
+	for _, value := range input {
+		in.X = append(in.X, value/255.0)
+	}
+
+	l1 := tf32.Sigmoid(tf32.Add(tf32.Mul(a.Set.Get("l1"), others.Get("input")), a.Set.Get("b1")))
+	l2 := tf32.Sigmoid(tf32.Add(tf32.Mul(a.Set.Get("l2"), l1), a.Set.Get("b2")))
+	loss := tf32.Sum(tf32.Quadratic(l2, others.Get("input")))
+
+	l := float32(0.0)
+	loss(func(a *tf32.V) bool {
+		l = a.X[0]
+		return true
+	})
+	return l
+}
+
 func (a *AutoEncoder) pow(x float64) float64 {
 	y := math.Pow(x, float64(a.Iteration+1))
 	if math.IsNaN(y) || math.IsInf(y, 0) {
@@ -478,7 +500,60 @@ func (a *AutoEncoder) Encode(input *[128][]float32) float32 {
 	return l
 }
 
-// AutoEncoderMind is a minde
+// Encode encodes a single input
+func (a *AutoEncoder) EncodeSingle(input []float32) float32 {
+	others := tf32.NewSet()
+	others.Add("input", 8*8, len(input))
+	in := others.ByName["input"]
+	for _, value := range input {
+		in.X = append(in.X, value/255.0)
+	}
+
+	l1 := tf32.Sigmoid(tf32.Add(tf32.Mul(a.Set.Get("l1"), others.Get("input")), a.Set.Get("b1")))
+	l2 := tf32.Sigmoid(tf32.Add(tf32.Mul(a.Set.Get("l2"), l1), a.Set.Get("b2")))
+	loss := tf32.Avg(tf32.Quadratic(l2, others.Get("input")))
+
+	l := float32(0.0)
+	a.Set.Zero()
+	others.Zero()
+	l = tf32.Gradient(loss).X[0]
+	if math.IsNaN(float64(l)) || math.IsInf(float64(l), 0) {
+		fmt.Println(a.Iteration, l)
+		return 0
+	}
+
+	norm := 0.0
+	for _, p := range a.Set.Weights {
+		for _, d := range p.D {
+			norm += float64(d * d)
+		}
+	}
+	norm = math.Sqrt(norm)
+	b1, b2 := a.pow(B1), a.pow(B2)
+	scaling := 1.0
+	if norm > 1 {
+		scaling = 1 / norm
+	}
+	for _, w := range a.Set.Weights {
+		for ii, d := range w.D {
+			g := d * float32(scaling)
+			m := B1*w.States[StateM][ii] + (1-B1)*g
+			v := B2*w.States[StateV][ii] + (1-B2)*g*g
+			w.States[StateM][ii] = m
+			w.States[StateV][ii] = v
+			mhat := m / (1 - float32(b1))
+			vhat := v / (1 - float32(b2))
+			if vhat < 0 {
+				vhat = 0
+			}
+			w.X[ii] -= Eta * mhat / (float32(math.Sqrt(float64(vhat))) + 1e-8)
+		}
+	}
+	a.Iteration++
+	return l
+}
+
+// AutoEncoderMind is a mind
 func AutoEncoderMind(frames chan Frame, do func(action TypeAction)) {
 	rng := rand.New(rand.NewSource(1))
 	var auto [actions]Auto
@@ -537,6 +612,161 @@ func AutoEncoderMind(frames chan Frame, do func(action TypeAction)) {
 			do(auto[index].Action)
 		}
 		auto[index].Auto.Encode(&p)
+		iteration++
+	}
+}
+
+// AutoEncoderMind is a mind mach 2
+func AutoEncoderMindMach2(frames chan Frame, do func(action TypeAction)) {
+	rng := rand.New(rand.NewSource(1))
+	img := <-frames
+	width := img.Frame.Bounds().Max.X
+	height := img.Frame.Bounds().Max.Y
+	w, h := width/8, height/8
+	fmt.Println(width, height, w, h, w*h)
+
+	auto := make([][actions]Auto, w*h)
+	for i := range auto {
+		for ii := range auto[i] {
+			auto[i][ii].Auto = NewAutoEncoder()
+			auto[i][ii].Action = TypeAction(i)
+		}
+	}
+
+	var votes [actions]uint
+
+	iteration := 0
+	for img := range frames {
+		width := img.Frame.Bounds().Max.X
+		height := img.Frame.Bounds().Max.Y
+		pixels := make([][]float32, 0, 8)
+		mask, s := make(map[int]bool), 0
+		for y := 0; y < height-8; y += 8 {
+			for x := 0; x < width-8; x += 8 {
+				pix := make([]float32, 8*8)
+				for yy := 0; yy < 8; yy++ {
+					for xx := 0; xx < 8; xx++ {
+						pixel := img.GrayAt(x+xx, y+yy)
+						pix[yy*8+xx] = float32(pixel.Y)
+					}
+				}
+				pixels = append(pixels, pix)
+				if rng.Intn(8) == 0 {
+					mask[s] = true
+				}
+				s++
+			}
+		}
+
+		done := make(chan int, 8)
+		measure := func(i int, seed int64) {
+			rng := rand.New(rand.NewSource(seed))
+			if !mask[i] {
+				done <- -1
+				return
+			}
+			sum, measures := float32(0.0), make([]float32, 0, 8)
+			for ii := range auto[i] {
+				value := auto[i][ii].Auto.MeasureSingle(pixels[i])
+				sum += value
+				measures = append(measures, value)
+			}
+			total, selected, act := float32(0.0), rng.Float32(), 0
+			for ii, value := range measures {
+				total += value / sum
+				if selected < total {
+					act = ii
+					break
+				}
+			}
+			done <- act
+		}
+		index, flight, cpus := 0, 0, runtime.NumCPU()
+		for index < len(pixels) && flight < cpus {
+			go measure(index, rng.Int63())
+			flight++
+			index++
+		}
+		for index < len(pixels) {
+			act := <-done
+			if act >= 0 {
+				votes[act]++
+			}
+			flight--
+
+			go measure(index, rng.Int63())
+			flight++
+			index++
+		}
+		for range flight {
+			act := <-done
+			if act >= 0 {
+				votes[act]++
+			}
+		}
+		min, max, minIndex, maxIndex := uint(math.MaxUint), uint(0), 0, 0
+		for ii, value := range votes {
+			if value > max {
+				max, maxIndex = value, ii
+			}
+			if value < min {
+				min, minIndex = value, ii
+			}
+			votes[ii] = 0
+		}
+		/*minIndex, maxIndex := 0, 0
+		sum := uint(0)
+		for _, value := range votes {
+			sum += value
+		}
+		total, selected := uint(0), uint(rng.Intn(int(sum)))
+		for i, value := range votes {
+			total += value
+			if selected < total {
+				maxIndex = i
+				break
+			}
+		}
+		ssum := uint(0)
+		for _, value := range votes {
+			ssum += sum - value
+		}
+		total, selected = uint(0), uint(rng.Intn(int(ssum)))
+		for i, value := range votes {
+			total += sum - value
+			if selected < total {
+				minIndex = i
+				break
+			}
+		}*/
+		go do(TypeAction(maxIndex))
+
+		encode := func(i int) {
+			if !mask[i] {
+				done <- -1
+				return
+			}
+			auto[i][minIndex].Auto.EncodeSingle(pixels[i])
+			done <- -1
+		}
+		index, flight, cpus = 0, 0, runtime.NumCPU()
+		for index < len(pixels) && flight < cpus {
+			go encode(index)
+			flight++
+			index++
+		}
+		for index < len(pixels) {
+			<-done
+			flight--
+
+			go encode(index)
+			flight++
+			index++
+		}
+		for range flight {
+			<-done
+		}
+
 		iteration++
 	}
 }
@@ -632,7 +862,7 @@ func main() {
 			gore.Run(game, []string{"-iwad", *FlagIwad})
 			game.terminating = true
 		}()
-		go AutoEncoderMind(game.frames, do)
+		go AutoEncoderMindMach2(game.frames, do)
 		if err := ebiten.RunGame(game); err != nil {
 			panic(err)
 		}
