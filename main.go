@@ -660,26 +660,46 @@ func AutoEncoderMindMach2(frames chan Frame, do func(action TypeAction)) {
 
 		done := make(chan int, 8)
 		measure := func(i int, seed int64) {
-			rng := rand.New(rand.NewSource(seed))
+			//rng := rand.New(rand.NewSource(seed))
 			if !mask[i] {
 				done <- -1
 				return
 			}
-			sum, measures := float32(0.0), make([]float32, 0, 8)
+			min, max, minIndex, maxIndex := float32(math.MaxFloat32), float32(0), 0, 0
+			for ii := range auto[i] {
+				value := auto[i][ii].Auto.MeasureSingle(pixels[i])
+				if value < min {
+					min, minIndex = value, ii
+				}
+				if value > max {
+					max, maxIndex = value, ii
+				}
+			}
+			/*sum, measures := float32(0.0), make([]float32, 0, 8)
 			for ii := range auto[i] {
 				value := auto[i][ii].Auto.MeasureSingle(pixels[i])
 				sum += value
 				measures = append(measures, value)
 			}
-			total, selected, act := float32(0.0), rng.Float32(), 0
+			total, sum1, selected, max := float32(0.0), float32(0.0), rng.Float32(), 0
 			for ii, value := range measures {
 				total += value / sum
+				sum1 += (1 - value/sum)
 				if selected < total {
-					act = ii
+					max = ii
 					break
 				}
 			}
-			done <- act
+			total, selected, min := float32(0.0), rng.Float32(), 0
+			for ii, value := range measures {
+				total += (1 - value/sum) / sum1
+				if selected < total {
+					min = ii
+					break
+				}
+			}*/
+			auto[i][maxIndex].Auto.EncodeSingle(pixels[i])
+			done <- minIndex
 		}
 		index, flight, cpus := 0, 0, runtime.NumCPU()
 		for index < len(pixels) && flight < cpus {
@@ -704,7 +724,17 @@ func AutoEncoderMindMach2(frames chan Frame, do func(action TypeAction)) {
 				votes[act]++
 			}
 		}
-		min, max, minIndex, maxIndex := uint(math.MaxUint), uint(0), 0, 0
+		if iteration%15 == 0 {
+			max, action := uint(0), 0
+			for ii, value := range votes {
+				if value > max {
+					max, action = value, ii
+				}
+				votes[ii] = 0
+			}
+			go do(TypeAction(action))
+		}
+		/*min, max, minIndex, maxIndex := uint(math.MaxUint), uint(0), 0, 0
 		for ii, value := range votes {
 			if value > max {
 				max, maxIndex = value, ii
@@ -714,7 +744,7 @@ func AutoEncoderMindMach2(frames chan Frame, do func(action TypeAction)) {
 			}
 			votes[ii] = 0
 		}
-		/*minIndex, maxIndex := 0, 0
+		minIndex, maxIndex := 0, 0
 		sum := uint(0)
 		for _, value := range votes {
 			sum += value
@@ -739,9 +769,8 @@ func AutoEncoderMindMach2(frames chan Frame, do func(action TypeAction)) {
 				break
 			}
 		}*/
-		go do(TypeAction(maxIndex))
 
-		encode := func(i int) {
+		/*encode := func(i int) {
 			if !mask[i] {
 				done <- -1
 				return
@@ -765,7 +794,7 @@ func AutoEncoderMindMach2(frames chan Frame, do func(action TypeAction)) {
 		}
 		for range flight {
 			<-done
-		}
+		}*/
 
 		iteration++
 	}
