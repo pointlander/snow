@@ -152,8 +152,10 @@ var (
 	FlagRobot = flag.String("robot", "urobot", "is the robot mode")
 	// FlagDoom doom mode
 	FlagDoom = flag.Bool("doom", false, "doom mode")
-	// iwad
+	// FlagIwad iwad
 	FlagIwad = flag.String("iwad", "", "iwad")
+	// FlagMind which mind to use
+	FlagMind = flag.String("mind", "two", "which mind to use")
 )
 
 // Mind is a minde
@@ -831,7 +833,11 @@ func main() {
 			gore.Run(game, []string{"-iwad", *FlagIwad})
 			game.terminating = true
 		}()
-		go AutoEncoderMindMach2(game.frames, do)
+		if *FlagMind == "one" {
+			go AutoEncoderMind(game.frames, do)
+		} else if *FlagMind == "two" {
+			go AutoEncoderMindMach2(game.frames, do)
+		}
 		if err := ebiten.RunGame(game); err != nil {
 			panic(err)
 		}
