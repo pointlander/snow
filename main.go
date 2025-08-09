@@ -155,7 +155,7 @@ var (
 	// FlagIwad iwad
 	FlagIwad = flag.String("iwad", "", "iwad")
 	// FlagMind which mind to use
-	FlagMind = flag.String("mind", "two", "which mind to use")
+	FlagMind = flag.String("mind", "three", "which mind to use")
 )
 
 // Mind is a minde
@@ -742,6 +742,124 @@ func AutoEncoderMindMach2(frames chan Frame, do func(action TypeAction)) {
 	}
 }
 
+// AutoEncoderMind is a mind mach 3
+func AutoEncoderMindMach3(frames chan Frame, do func(action TypeAction)) {
+	rng := rand.New(rand.NewSource(1))
+	img := <-frames
+	width := img.Frame.Bounds().Max.X
+	height := img.Frame.Bounds().Max.Y
+	w, h := width/8, height/8
+	fmt.Println(width, height, w, h, w*h)
+
+	auto := make([][actions][actions]Auto, w*h)
+	for i := range auto {
+		for ii := range auto[i] {
+			for iii := range auto[i][ii] {
+				auto[i][ii][iii].Auto = NewAutoEncoder()
+				auto[i][ii][iii].Action = TypeAction(i)
+			}
+		}
+	}
+
+	var votes [actions]uint
+
+	iteration := 0
+	last := TypeAction(0)
+	for img := range frames {
+		width := img.Frame.Bounds().Max.X
+		height := img.Frame.Bounds().Max.Y
+		type Patch struct {
+			Input  []float32
+			Output []float32
+		}
+		pixels := make([]Patch, 0, 8)
+		mask, s := make(map[int]bool), 0
+		for y := 0; y < height-8; y += 8 {
+			for x := 0; x < width-8; x += 8 {
+				input, output := make([]float32, 8*8), make([]float32, 8*8)
+				for yy := 0; yy < 8; yy++ {
+					for xx := 0; xx < 8; xx++ {
+						pixel := float32(img.GrayAt(x+xx, y+yy).Y) / 255
+						output[yy*8+xx] = pixel
+						pixel += float32(rng.NormFloat64() / 8)
+						if pixel < 0 {
+							pixel = 0
+						}
+						if pixel > 1 {
+							pixel = 1
+						}
+						input[yy*8+xx] = pixel
+					}
+				}
+				pixels = append(pixels, Patch{
+					Input:  input,
+					Output: output,
+				})
+				if rng.Intn(8) == 0 {
+					mask[s] = true
+				}
+				s++
+			}
+		}
+
+		done := make(chan int, 8)
+		measure := func(i int) {
+			if !mask[i] {
+				done <- -1
+				return
+			}
+			min, max, minIndex, maxIndex := float32(math.MaxFloat32), float32(0), 0, 0
+			for ii := range auto[i] {
+				value := auto[i][last][ii].Auto.MeasureSingle(pixels[i].Input, pixels[i].Output)
+				if value < min {
+					min, minIndex = value, ii
+				}
+				if value > max {
+					max, maxIndex = value, ii
+				}
+			}
+			auto[i][last][maxIndex].Auto.EncodeSingle(pixels[i].Input, pixels[i].Output)
+			done <- minIndex
+		}
+		index, flight, cpus := 0, 0, runtime.NumCPU()
+		for index < len(pixels) && flight < cpus {
+			go measure(index)
+			flight++
+			index++
+		}
+		for index < len(pixels) {
+			act := <-done
+			if act >= 0 {
+				votes[act]++
+			}
+			flight--
+
+			go measure(index)
+			flight++
+			index++
+		}
+		for range flight {
+			act := <-done
+			if act >= 0 {
+				votes[act]++
+			}
+		}
+		if iteration%15 == 0 {
+			max, action := uint(0), 0
+			for ii, value := range votes {
+				if value > max {
+					max, action = value, ii
+				}
+				votes[ii] = 0
+			}
+			go do(TypeAction(action))
+			last = TypeAction(action)
+		}
+
+		iteration++
+	}
+}
+
 func main() {
 	flag.Parse()
 
@@ -837,6 +955,8 @@ func main() {
 			go AutoEncoderMind(game.frames, do)
 		} else if *FlagMind == "two" {
 			go AutoEncoderMindMach2(game.frames, do)
+		} else if *FlagMind == "three" {
+			go AutoEncoderMindMach3(game.frames, do)
 		}
 		if err := ebiten.RunGame(game); err != nil {
 			panic(err)
