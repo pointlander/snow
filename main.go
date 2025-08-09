@@ -781,7 +781,7 @@ func AutoEncoderMindMach3(frames chan Frame, do func(action TypeAction)) {
 					for xx := 0; xx < 8; xx++ {
 						pixel := float32(img.GrayAt(x+xx, y+yy).Y) / 255
 						output[yy*8+xx] = pixel
-						pixel += float32(rng.NormFloat64() / 8)
+						pixel += float32(rng.NormFloat64() / 16)
 						if pixel < 0 {
 							pixel = 0
 						}
@@ -795,17 +795,24 @@ func AutoEncoderMindMach3(frames chan Frame, do func(action TypeAction)) {
 					Input:  input,
 					Output: output,
 				})
-				if rng.Intn(8) == 0 {
+				if rng.Intn(4) == 0 {
 					mask[s] = true
 				}
 				s++
 			}
 		}
 
-		done := make(chan int, 8)
+		type Vote struct {
+			Min int
+			Max int
+		}
+		done := make(chan Vote, 8)
 		measure := func(i int) {
 			if !mask[i] {
-				done <- -1
+				done <- Vote{
+					Min: -1,
+					Max: -1,
+				}
 				return
 			}
 			min, max, minIndex, maxIndex := float32(math.MaxFloat32), float32(0), 0, 0
@@ -819,7 +826,10 @@ func AutoEncoderMindMach3(frames chan Frame, do func(action TypeAction)) {
 				}
 			}
 			auto[i][last][maxIndex].Auto.EncodeSingle(pixels[i].Input, pixels[i].Output)
-			done <- minIndex
+			done <- Vote{
+				Min: minIndex,
+				Max: maxIndex,
+			}
 		}
 		index, flight, cpus := 0, 0, runtime.NumCPU()
 		for index < len(pixels) && flight < cpus {
@@ -829,8 +839,11 @@ func AutoEncoderMindMach3(frames chan Frame, do func(action TypeAction)) {
 		}
 		for index < len(pixels) {
 			act := <-done
-			if act >= 0 {
-				votes[act]++
+			if act.Min >= 0 {
+				votes[act.Min]++
+			}
+			if act.Max >= 0 {
+				votes[act.Max]++
 			}
 			flight--
 
@@ -840,8 +853,11 @@ func AutoEncoderMindMach3(frames chan Frame, do func(action TypeAction)) {
 		}
 		for range flight {
 			act := <-done
-			if act >= 0 {
-				votes[act]++
+			if act.Min >= 0 {
+				votes[act.Min]++
+			}
+			if act.Max >= 0 {
+				votes[act.Max]++
 			}
 		}
 		if iteration%15 == 0 {
