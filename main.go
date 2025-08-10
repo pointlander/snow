@@ -508,7 +508,7 @@ func (a *AutoEncoder) Encode(input *[128][]float32) float32 {
 }
 
 // Encode encodes a single input
-func (a *AutoEncoder) EncodeSingle(input, output []float32) float32 {
+func (a *AutoEncoder) EncodeSingle(input, output []float32, rng *rand.Rand) float32 {
 	others := tf32.NewSet()
 	others.Add("input", 8*8, 1)
 	others.Add("output", 8*8, 1)
@@ -521,7 +521,11 @@ func (a *AutoEncoder) EncodeSingle(input, output []float32) float32 {
 		out.X = append(out.X, value)
 	}
 
-	l1 := tf32.Sigmoid(tf32.Add(tf32.Mul(a.Set.Get("l1"), others.Get("input")), a.Set.Get("b1")))
+	dropout := map[string]interface{}{
+		"rng": rng,
+	}
+
+	l1 := tf32.Dropout(tf32.Sigmoid(tf32.Add(tf32.Mul(a.Set.Get("l1"), others.Get("input")), a.Set.Get("b1"))), dropout)
 	l2 := tf32.Sigmoid(tf32.Add(tf32.Mul(a.Set.Get("l2"), l1), a.Set.Get("b2")))
 	loss := tf32.Avg(tf32.Quadratic(l2, others.Get("output")))
 
@@ -686,7 +690,8 @@ func AutoEncoderMindMach2(frames chan Frame, do func(action TypeAction)) {
 		}
 
 		done := make(chan int, 8)
-		measure := func(i int) {
+		measure := func(i int, seed int64) {
+			rng := rand.New(rand.NewSource(seed))
 			if !mask[i] {
 				done <- -1
 				return
@@ -701,12 +706,12 @@ func AutoEncoderMindMach2(frames chan Frame, do func(action TypeAction)) {
 					max, maxIndex = value, ii
 				}
 			}
-			auto[i][maxIndex].Auto.EncodeSingle(pixels[i].Input, pixels[i].Output)
+			auto[i][maxIndex].Auto.EncodeSingle(pixels[i].Input, pixels[i].Output, rng)
 			done <- minIndex
 		}
 		index, flight, cpus := 0, 0, runtime.NumCPU()
 		for index < len(pixels) && flight < cpus {
-			go measure(index)
+			go measure(index, rng.Int63())
 			flight++
 			index++
 		}
@@ -717,7 +722,7 @@ func AutoEncoderMindMach2(frames chan Frame, do func(action TypeAction)) {
 			}
 			flight--
 
-			go measure(index)
+			go measure(index, rng.Int63())
 			flight++
 			index++
 		}
@@ -820,7 +825,8 @@ func AutoEncoderMindMach3(frames chan Frame, do func(action TypeAction)) {
 			Entropy float32
 		}
 		done := make(chan Vote, 8)
-		measure := func(i int) {
+		measure := func(i int, seed int64) {
+			rng := rand.New(rand.NewSource(seed))
 			if !mask[i] {
 				done <- Vote{
 					Min: -1,
@@ -838,7 +844,7 @@ func AutoEncoderMindMach3(frames chan Frame, do func(action TypeAction)) {
 					max, maxIndex = value, ii
 				}
 			}
-			auto[i][last][maxIndex].Auto.EncodeSingle(pixels[i].Input, pixels[i].Output)
+			auto[i][last][maxIndex].Auto.EncodeSingle(pixels[i].Input, pixels[i].Output, rng)
 			done <- Vote{
 				Min:     minIndex,
 				Max:     maxIndex,
@@ -847,7 +853,7 @@ func AutoEncoderMindMach3(frames chan Frame, do func(action TypeAction)) {
 		}
 		index, flight, cpus := 0, 0, runtime.NumCPU()
 		for index < len(pixels) && flight < cpus {
-			go measure(index)
+			go measure(index, rng.Int63())
 			flight++
 			index++
 		}
@@ -861,7 +867,7 @@ func AutoEncoderMindMach3(frames chan Frame, do func(action TypeAction)) {
 			}
 			flight--
 
-			go measure(index)
+			go measure(index, rng.Int63())
 			flight++
 			index++
 		}
