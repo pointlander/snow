@@ -747,6 +747,9 @@ func AutoEncoderMindMach2(frames chan Frame, do func(action TypeAction)) {
 	}
 }
 
+// State is a markov state
+type State [1]TypeAction
+
 // AutoEncoderMind is a mind mach 3
 func AutoEncoderMindMach3(frames chan Frame, do func(action TypeAction)) {
 	rng := rand.New(rand.NewSource(1))
@@ -756,20 +759,15 @@ func AutoEncoderMindMach3(frames chan Frame, do func(action TypeAction)) {
 	w, h := width/8, height/8
 	fmt.Println(width, height, w, h, w*h)
 
-	auto := make([][actions][actions]Auto, w*h)
+	auto := make([]map[State]*[actions]Auto, w*h)
 	for i := range auto {
-		for ii := range auto[i] {
-			for iii := range auto[i][ii] {
-				auto[i][ii][iii].Auto = NewAutoEncoder()
-				auto[i][ii][iii].Action = TypeAction(i)
-			}
-		}
+		auto[i] = make(map[State]*[actions]Auto)
 	}
 
 	var votes [actions]float32
 
 	iteration := 0
-	last := TypeAction(0)
+	var state State
 	for img := range frames {
 		width := img.Frame.Bounds().Max.X
 		height := img.Frame.Bounds().Max.Y
@@ -835,8 +833,17 @@ func AutoEncoderMindMach3(frames chan Frame, do func(action TypeAction)) {
 				return
 			}
 			min, max, minIndex, maxIndex := float32(math.MaxFloat32), float32(0), 0, 0
-			for ii := range auto[i] {
-				value := auto[i][last][ii].Auto.MeasureSingle(pixels[i].Input, pixels[i].Output)
+			set := auto[i][state]
+			if set == nil {
+				set = &[actions]Auto{}
+				for ii := range set {
+					set[ii].Auto = NewAutoEncoder()
+					set[ii].Action = TypeAction(ii)
+				}
+				auto[i][state] = set
+			}
+			for ii := range set {
+				value := set[ii].Auto.MeasureSingle(pixels[i].Input, pixels[i].Output)
 				if value < min {
 					min, minIndex = value, ii
 				}
@@ -844,7 +851,7 @@ func AutoEncoderMindMach3(frames chan Frame, do func(action TypeAction)) {
 					max, maxIndex = value, ii
 				}
 			}
-			auto[i][last][maxIndex].Auto.EncodeSingle(pixels[i].Input, pixels[i].Output, rng)
+			set[maxIndex].Auto.EncodeSingle(pixels[i].Input, pixels[i].Output, rng)
 			done <- Vote{
 				Min:     minIndex,
 				Max:     maxIndex,
@@ -863,7 +870,7 @@ func AutoEncoderMindMach3(frames chan Frame, do func(action TypeAction)) {
 				votes[act.Min] += act.Entropy
 			}
 			if act.Max >= 0 {
-				votes[act.Max] += act.Entropy
+				votes[act.Max] += 3 * act.Entropy
 			}
 			flight--
 
@@ -889,7 +896,10 @@ func AutoEncoderMindMach3(frames chan Frame, do func(action TypeAction)) {
 				votes[ii] = 0
 			}
 			go do(TypeAction(action))
-			last = TypeAction(action)
+			pre := TypeAction(action)
+			for ii, value := range state {
+				state[ii], pre = pre, value
+			}
 		}
 
 		iteration++
