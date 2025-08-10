@@ -761,7 +761,7 @@ func AutoEncoderMindMach3(frames chan Frame, do func(action TypeAction)) {
 		}
 	}
 
-	var votes [actions]uint
+	var votes [actions]float32
 
 	iteration := 0
 	last := TypeAction(0)
@@ -769,17 +769,20 @@ func AutoEncoderMindMach3(frames chan Frame, do func(action TypeAction)) {
 		width := img.Frame.Bounds().Max.X
 		height := img.Frame.Bounds().Max.Y
 		type Patch struct {
-			Input  []float32
-			Output []float32
+			Input   []float32
+			Output  []float32
+			Entropy float32
 		}
 		pixels := make([]Patch, 0, 8)
 		mask, s := make(map[int]bool), 0
 		for y := 0; y < height-8; y += 8 {
 			for x := 0; x < width-8; x += 8 {
 				input, output := make([]float32, 8*8), make([]float32, 8*8)
+				var histogram [256]float32
 				for yy := 0; yy < 8; yy++ {
 					for xx := 0; xx < 8; xx++ {
-						pixel := float32(img.GrayAt(x+xx, y+yy).Y) / 255
+						g := img.GrayAt(x+xx, y+yy)
+						pixel := float32(g.Y) / 255
 						output[yy*8+xx] = pixel
 						pixel += float32(rng.NormFloat64() / 16)
 						if pixel < 0 {
@@ -789,11 +792,20 @@ func AutoEncoderMindMach3(frames chan Frame, do func(action TypeAction)) {
 							pixel = 1
 						}
 						input[yy*8+xx] = pixel
+						histogram[g.Y]++
 					}
 				}
+				entropy := float32(0.0)
+				for _, value := range histogram {
+					if value == 0 {
+						continue
+					}
+					entropy += (value / (float32(8 * 8))) * float32(math.Log2(float64(value)/float64(8*8)))
+				}
 				pixels = append(pixels, Patch{
-					Input:  input,
-					Output: output,
+					Input:   input,
+					Output:  output,
+					Entropy: -entropy,
 				})
 				if rng.Intn(4) == 0 {
 					mask[s] = true
@@ -803,8 +815,9 @@ func AutoEncoderMindMach3(frames chan Frame, do func(action TypeAction)) {
 		}
 
 		type Vote struct {
-			Min int
-			Max int
+			Min     int
+			Max     int
+			Entropy float32
 		}
 		done := make(chan Vote, 8)
 		measure := func(i int) {
@@ -827,8 +840,9 @@ func AutoEncoderMindMach3(frames chan Frame, do func(action TypeAction)) {
 			}
 			auto[i][last][maxIndex].Auto.EncodeSingle(pixels[i].Input, pixels[i].Output)
 			done <- Vote{
-				Min: minIndex,
-				Max: maxIndex,
+				Min:     minIndex,
+				Max:     maxIndex,
+				Entropy: pixels[i].Entropy,
 			}
 		}
 		index, flight, cpus := 0, 0, runtime.NumCPU()
@@ -840,10 +854,10 @@ func AutoEncoderMindMach3(frames chan Frame, do func(action TypeAction)) {
 		for index < len(pixels) {
 			act := <-done
 			if act.Min >= 0 {
-				votes[act.Min]++
+				votes[act.Min] += act.Entropy
 			}
 			if act.Max >= 0 {
-				votes[act.Max]++
+				votes[act.Max] += act.Entropy
 			}
 			flight--
 
@@ -861,7 +875,7 @@ func AutoEncoderMindMach3(frames chan Frame, do func(action TypeAction)) {
 			}
 		}
 		if iteration%15 == 0 {
-			max, action := uint(0), 0
+			max, action := float32(0.0), 0
 			for ii, value := range votes {
 				if value > max {
 					max, action = value, ii
