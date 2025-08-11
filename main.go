@@ -360,16 +360,26 @@ type AutoEncoder struct {
 	Iteration int
 }
 
+// Order is the markov order
+const Order = 2
+
+// State is a markov state
+type State [Order]TypeAction
+
 // NewAutoEncoder creates a new autoencoder
-func NewAutoEncoder() *AutoEncoder {
+func NewAutoEncoder(markov bool) *AutoEncoder {
 	a := AutoEncoder{
 		Rng: rand.New(rand.NewSource(1)),
 	}
+	extra := 0
+	if markov {
+		extra = Order * 5
+	}
 	set := tf32.NewSet()
-	set.Add("l1", 8*8, 8*8/2)
+	set.Add("l1", 8*8+extra, 8*8/2)
 	set.Add("b1", 8*8/2, 1)
-	set.Add("l2", 8*8, 8*8)
-	set.Add("b2", 8*8, 1)
+	set.Add("l2", 8*8, 8*8+extra)
+	set.Add("b2", 8*8+extra, 1)
 
 	for i := range set.Weights {
 		w := set.Weights[i]
@@ -419,17 +429,29 @@ func (a *AutoEncoder) Measure(input *[128][]float32) float32 {
 }
 
 // Measure measures the loss of a single input
-func (a *AutoEncoder) MeasureSingle(input, output []float32) float32 {
+func (a *AutoEncoder) MeasureSingle(input, output []float32, state *State) float32 {
 	others := tf32.NewSet()
-	others.Add("input", 8*8, 1)
-	others.Add("output", 8*8, 1)
+	size := 8 * 8
+	if state != nil {
+		size += Order * 5
+	}
+	others.Add("input", size, 1)
+	others.Add("output", size, 1)
 	in := others.ByName["input"]
 	for _, value := range input {
-		in.X = append(in.X, value/255.0)
+		in.X = append(in.X, value)
 	}
 	out := others.ByName["output"]
 	for _, value := range output {
 		out.X = append(out.X, value)
+	}
+	if state != nil {
+		for _, v := range state {
+			var s [5]float32
+			s[v] = 1
+			in.X = append(in.X, s[:]...)
+			out.X = append(out.X, s[:]...)
+		}
 	}
 
 	l1 := tf32.Everett(tf32.Add(tf32.Mul(a.Set.Get("l1"), others.Get("input")), a.Set.Get("b1")))
@@ -508,10 +530,14 @@ func (a *AutoEncoder) Encode(input *[128][]float32) float32 {
 }
 
 // Encode encodes a single input
-func (a *AutoEncoder) EncodeSingle(input, output []float32, rng *rand.Rand) float32 {
+func (a *AutoEncoder) EncodeSingle(input, output []float32, rng *rand.Rand, state *State) float32 {
 	others := tf32.NewSet()
-	others.Add("input", 8*8, 1)
-	others.Add("output", 8*8, 1)
+	size := 8 * 8
+	if state != nil {
+		size += Order * 5
+	}
+	others.Add("input", size, 1)
+	others.Add("output", size, 1)
 	in := others.ByName["input"]
 	for _, value := range input {
 		in.X = append(in.X, value)
@@ -519,6 +545,14 @@ func (a *AutoEncoder) EncodeSingle(input, output []float32, rng *rand.Rand) floa
 	out := others.ByName["output"]
 	for _, value := range output {
 		out.X = append(out.X, value)
+	}
+	if state != nil {
+		for _, v := range state {
+			var s [5]float32
+			s[v] = 1
+			in.X = append(in.X, s[:]...)
+			out.X = append(out.X, s[:]...)
+		}
 	}
 
 	dropout := map[string]interface{}{
@@ -574,7 +608,7 @@ func AutoEncoderMind(frames chan Frame, do func(action TypeAction)) {
 	rng := rand.New(rand.NewSource(1))
 	var auto [actions]Auto
 	for i := range auto {
-		auto[i].Auto = NewAutoEncoder()
+		auto[i].Auto = NewAutoEncoder(false)
 		auto[i].Action = TypeAction(i)
 	}
 
@@ -644,7 +678,7 @@ func AutoEncoderMindMach2(frames chan Frame, do func(action TypeAction)) {
 	auto := make([][actions]Auto, w*h)
 	for i := range auto {
 		for ii := range auto[i] {
-			auto[i][ii].Auto = NewAutoEncoder()
+			auto[i][ii].Auto = NewAutoEncoder(false)
 			auto[i][ii].Action = TypeAction(i)
 		}
 	}
@@ -698,7 +732,7 @@ func AutoEncoderMindMach2(frames chan Frame, do func(action TypeAction)) {
 			}
 			min, max, minIndex, maxIndex := float32(math.MaxFloat32), float32(0), 0, 0
 			for ii := range auto[i] {
-				value := auto[i][ii].Auto.MeasureSingle(pixels[i].Input, pixels[i].Output)
+				value := auto[i][ii].Auto.MeasureSingle(pixels[i].Input, pixels[i].Output, nil)
 				if value < min {
 					min, minIndex = value, ii
 				}
@@ -706,7 +740,7 @@ func AutoEncoderMindMach2(frames chan Frame, do func(action TypeAction)) {
 					max, maxIndex = value, ii
 				}
 			}
-			auto[i][maxIndex].Auto.EncodeSingle(pixels[i].Input, pixels[i].Output, rng)
+			auto[i][maxIndex].Auto.EncodeSingle(pixels[i].Input, pixels[i].Output, rng, nil)
 			done <- minIndex
 		}
 		index, flight, cpus := 0, 0, runtime.NumCPU()
@@ -747,9 +781,6 @@ func AutoEncoderMindMach2(frames chan Frame, do func(action TypeAction)) {
 	}
 }
 
-// State is a markov state
-type State [1]TypeAction
-
 // AutoEncoderMind is a mind mach 3
 func AutoEncoderMindMach3(frames chan Frame, do func(action TypeAction)) {
 	rng := rand.New(rand.NewSource(1))
@@ -759,9 +790,12 @@ func AutoEncoderMindMach3(frames chan Frame, do func(action TypeAction)) {
 	w, h := width/8, height/8
 	fmt.Println(width, height, w, h, w*h)
 
-	auto := make([]map[State]*[actions]Auto, w*h)
+	auto := make([][actions]Auto, w*h)
 	for i := range auto {
-		auto[i] = make(map[State]*[actions]Auto)
+		for ii := range auto[i] {
+			auto[i][ii].Auto = NewAutoEncoder(true)
+			auto[i][ii].Action = TypeAction(ii)
+		}
 	}
 
 	var votes [actions]float32
@@ -833,17 +867,8 @@ func AutoEncoderMindMach3(frames chan Frame, do func(action TypeAction)) {
 				return
 			}
 			min, max, minIndex, maxIndex := float32(math.MaxFloat32), float32(0), 0, 0
-			set := auto[i][state]
-			if set == nil {
-				set = &[actions]Auto{}
-				for ii := range set {
-					set[ii].Auto = NewAutoEncoder()
-					set[ii].Action = TypeAction(ii)
-				}
-				auto[i][state] = set
-			}
-			for ii := range set {
-				value := set[ii].Auto.MeasureSingle(pixels[i].Input, pixels[i].Output)
+			for ii := range auto[i] {
+				value := auto[i][ii].Auto.MeasureSingle(pixels[i].Input, pixels[i].Output, &state)
 				if value < min {
 					min, minIndex = value, ii
 				}
@@ -851,7 +876,7 @@ func AutoEncoderMindMach3(frames chan Frame, do func(action TypeAction)) {
 					max, maxIndex = value, ii
 				}
 			}
-			set[maxIndex].Auto.EncodeSingle(pixels[i].Input, pixels[i].Output, rng)
+			auto[i][maxIndex].Auto.EncodeSingle(pixels[i].Input, pixels[i].Output, rng, &state)
 			done <- Vote{
 				Min:     minIndex,
 				Max:     maxIndex,
