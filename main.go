@@ -366,8 +366,8 @@ func NewAutoEncoder() *AutoEncoder {
 		Rng: rand.New(rand.NewSource(1)),
 	}
 	set := tf32.NewSet()
-	set.Add("l1", 8*8, 8*8)
-	set.Add("b1", 8*8, 1)
+	set.Add("l1", 8*8, 8*8/2)
+	set.Add("b1", 8*8/2, 1)
 	set.Add("l2", 8*8, 8*8)
 	set.Add("b2", 8*8, 1)
 
@@ -406,8 +406,8 @@ func (a *AutoEncoder) Measure(input *[128][]float32) float32 {
 		}
 	}
 
-	l1 := tf32.Sigmoid(tf32.Add(tf32.Mul(a.Set.Get("l1"), others.Get("input")), a.Set.Get("b1")))
-	l2 := tf32.Sigmoid(tf32.Add(tf32.Mul(a.Set.Get("l2"), l1), a.Set.Get("b2")))
+	l1 := tf32.Everett(tf32.Add(tf32.Mul(a.Set.Get("l1"), others.Get("input")), a.Set.Get("b1")))
+	l2 := tf32.Add(tf32.Mul(a.Set.Get("l2"), l1), a.Set.Get("b2"))
 	loss := tf32.Sum(tf32.Quadratic(l2, others.Get("input")))
 
 	l := float32(0.0)
@@ -432,8 +432,8 @@ func (a *AutoEncoder) MeasureSingle(input, output []float32) float32 {
 		out.X = append(out.X, value)
 	}
 
-	l1 := tf32.Sigmoid(tf32.Add(tf32.Mul(a.Set.Get("l1"), others.Get("input")), a.Set.Get("b1")))
-	l2 := tf32.Sigmoid(tf32.Add(tf32.Mul(a.Set.Get("l2"), l1), a.Set.Get("b2")))
+	l1 := tf32.Everett(tf32.Add(tf32.Mul(a.Set.Get("l1"), others.Get("input")), a.Set.Get("b1")))
+	l2 := tf32.Add(tf32.Mul(a.Set.Get("l2"), l1), a.Set.Get("b2"))
 	loss := tf32.Sum(tf32.Quadratic(l2, others.Get("output")))
 
 	l := float32(0.0)
@@ -463,8 +463,8 @@ func (a *AutoEncoder) Encode(input *[128][]float32) float32 {
 		}
 	}
 
-	l1 := tf32.Sigmoid(tf32.Add(tf32.Mul(a.Set.Get("l1"), others.Get("input")), a.Set.Get("b1")))
-	l2 := tf32.Sigmoid(tf32.Add(tf32.Mul(a.Set.Get("l2"), l1), a.Set.Get("b2")))
+	l1 := tf32.Everett(tf32.Add(tf32.Mul(a.Set.Get("l1"), others.Get("input")), a.Set.Get("b1")))
+	l2 := tf32.Add(tf32.Mul(a.Set.Get("l2"), l1), a.Set.Get("b2"))
 	loss := tf32.Avg(tf32.Quadratic(l2, others.Get("input")))
 
 	l := float32(0.0)
@@ -525,8 +525,8 @@ func (a *AutoEncoder) EncodeSingle(input, output []float32, rng *rand.Rand) floa
 		"rng": rng,
 	}
 
-	l1 := tf32.Dropout(tf32.Sigmoid(tf32.Add(tf32.Mul(a.Set.Get("l1"), others.Get("input")), a.Set.Get("b1"))), dropout)
-	l2 := tf32.Sigmoid(tf32.Add(tf32.Mul(a.Set.Get("l2"), l1), a.Set.Get("b2")))
+	l1 := tf32.Dropout(tf32.Everett(tf32.Add(tf32.Mul(a.Set.Get("l1"), others.Get("input")), a.Set.Get("b1"))), dropout)
+	l2 := tf32.Add(tf32.Mul(a.Set.Get("l2"), l1), a.Set.Get("b2"))
 	loss := tf32.Avg(tf32.Quadratic(l2, others.Get("output")))
 
 	l := float32(0.0)
