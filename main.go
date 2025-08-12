@@ -112,6 +112,8 @@ const (
 	ActionBackward
 	// ActionNone
 	ActionNone
+	// ActionActivate
+	ActionActivate
 	// ActionLightOn
 	ActionLightOn
 	// ActionLightOff
@@ -361,25 +363,30 @@ type AutoEncoder struct {
 }
 
 // Order is the markov order
-const Order = 2
+const (
+	// Actions is the number of doom actions
+	Actions = 6
+	// Order is the order of the markov model
+	Order = 2
+)
 
 // State is a markov state
 type State [Order]TypeAction
 
 // NewAutoEncoder creates a new autoencoder
-func NewAutoEncoder(markov bool) *AutoEncoder {
+func NewAutoEncoder(size int, markov bool) *AutoEncoder {
 	a := AutoEncoder{
 		Rng: rand.New(rand.NewSource(1)),
 	}
 	extra := 0
 	if markov {
-		extra = Order * 5
+		extra = Order * Actions
 	}
 	set := tf32.NewSet()
-	set.Add("l1", 8*8+extra, 8*8/2)
-	set.Add("b1", 8*8/2, 1)
-	set.Add("l2", 8*8, 8*8+extra)
-	set.Add("b2", 8*8+extra, 1)
+	set.Add("l1", size+extra, size/2)
+	set.Add("b1", size/2, 1)
+	set.Add("l2", size, size+extra)
+	set.Add("b2", size+extra, 1)
 
 	for i := range set.Weights {
 		w := set.Weights[i]
@@ -431,9 +438,9 @@ func (a *AutoEncoder) Measure(input *[128][]float32) float32 {
 // Measure measures the loss of a single input
 func (a *AutoEncoder) MeasureSingle(input, output []float32, state *State) float32 {
 	others := tf32.NewSet()
-	size := 8 * 8
+	size := len(input)
 	if state != nil {
-		size += Order * 5
+		size += Order * Actions
 	}
 	others.Add("input", size, 1)
 	others.Add("output", size, 1)
@@ -447,7 +454,7 @@ func (a *AutoEncoder) MeasureSingle(input, output []float32, state *State) float
 	}
 	if state != nil {
 		for _, v := range state {
-			var s [5]float32
+			var s [Actions]float32
 			s[v] = 1
 			in.X = append(in.X, s[:]...)
 			out.X = append(out.X, s[:]...)
@@ -532,9 +539,9 @@ func (a *AutoEncoder) Encode(input *[128][]float32) float32 {
 // Encode encodes a single input
 func (a *AutoEncoder) EncodeSingle(input, output []float32, rng *rand.Rand, state *State) float32 {
 	others := tf32.NewSet()
-	size := 8 * 8
+	size := len(input)
 	if state != nil {
-		size += Order * 5
+		size += Order * Actions
 	}
 	others.Add("input", size, 1)
 	others.Add("output", size, 1)
@@ -548,7 +555,7 @@ func (a *AutoEncoder) EncodeSingle(input, output []float32, rng *rand.Rand, stat
 	}
 	if state != nil {
 		for _, v := range state {
-			var s [5]float32
+			var s [Actions]float32
 			s[v] = 1
 			in.X = append(in.X, s[:]...)
 			out.X = append(out.X, s[:]...)
@@ -606,13 +613,13 @@ func (a *AutoEncoder) EncodeSingle(input, output []float32, rng *rand.Rand, stat
 // AutoEncoderMind is a mind
 func AutoEncoderMind(frames chan Frame, do func(action TypeAction)) {
 	rng := rand.New(rand.NewSource(1))
-	var auto [actions]Auto
+	var auto [Actions]Auto
 	for i := range auto {
-		auto[i].Auto = NewAutoEncoder(false)
+		auto[i].Auto = NewAutoEncoder(8*8, false)
 		auto[i].Action = TypeAction(i)
 	}
 
-	var votes [actions]uint
+	var votes [Actions]uint
 
 	img := <-frames
 	width := img.Frame.Bounds().Max.X
@@ -624,7 +631,7 @@ func AutoEncoderMind(frames chan Frame, do func(action TypeAction)) {
 	for img := range frames {
 		width := img.Frame.Bounds().Max.X
 		height := img.Frame.Bounds().Max.Y
-		var l [actions]float32
+		var l [Actions]float32
 		var p [128][]float32
 		for i := range p {
 			x := rng.Intn(width - 8)
@@ -675,15 +682,15 @@ func AutoEncoderMindMach2(frames chan Frame, do func(action TypeAction)) {
 	w, h := width/8, height/8
 	fmt.Println(width, height, w, h, w*h)
 
-	auto := make([][actions]Auto, w*h)
+	auto := make([][Actions]Auto, w*h)
 	for i := range auto {
 		for ii := range auto[i] {
-			auto[i][ii].Auto = NewAutoEncoder(false)
+			auto[i][ii].Auto = NewAutoEncoder(8*8, false)
 			auto[i][ii].Action = TypeAction(i)
 		}
 	}
 
-	var votes [actions]uint
+	var votes [Actions]uint
 
 	iteration := 0
 	for img := range frames {
@@ -790,15 +797,21 @@ func AutoEncoderMindMach3(frames chan Frame, do func(action TypeAction)) {
 	w, h := width/8, height/8
 	fmt.Println(width, height, w, h, w*h)
 
-	auto := make([][actions]Auto, w*h)
+	auto := make([][Actions]Auto, w*h)
 	for i := range auto {
 		for ii := range auto[i] {
-			auto[i][ii].Auto = NewAutoEncoder(true)
+			auto[i][ii].Auto = NewAutoEncoder(8*8, true)
 			auto[i][ii].Action = TypeAction(ii)
 		}
 	}
 
-	var votes [actions]float32
+	var mind [Actions]Auto
+	for i := range mind {
+		mind[i].Auto = NewAutoEncoder(6, true)
+		mind[i].Action = TypeAction(i)
+	}
+
+	var votes [Actions]float32
 
 	iteration := 0
 	var state State
@@ -895,7 +908,7 @@ func AutoEncoderMindMach3(frames chan Frame, do func(action TypeAction)) {
 				votes[act.Min] += act.Entropy
 			}
 			if act.Max >= 0 {
-				votes[act.Max] += 4 * act.Entropy
+				votes[act.Max] += act.Entropy
 			}
 			flight--
 
@@ -909,17 +922,37 @@ func AutoEncoderMindMach3(frames chan Frame, do func(action TypeAction)) {
 				votes[act.Min] += act.Entropy
 			}
 			if act.Max >= 0 {
-				votes[act.Max] += 4 * act.Entropy
+				votes[act.Max] += act.Entropy
 			}
 		}
 		if iteration%30 == 0 {
-			max, action := float32(0.0), 0
+			input, output := make([]float32, Actions), make([]float32, Actions)
+			sum := float32(0.0)
+			for _, value := range votes {
+				sum += value
+			}
+			for i, value := range votes {
+				input[i] = value / sum
+				output[i] = value / sum
+			}
+			max, min, learn, action := float32(0.0), float32(math.MaxFloat32), 0, 0
+			for i := range mind {
+				value := mind[i].Auto.MeasureSingle(input, output, &state)
+				if value > max {
+					max, learn = value, i
+				}
+				if value < min {
+					min, action = value, i
+				}
+			}
+			mind[learn].Auto.EncodeSingle(input, output, rng, &state)
+			/*max, action := float32(0.0), 0
 			for ii, value := range votes {
 				if value > max {
 					max, action = value, ii
 				}
 				votes[ii] = 0
-			}
+			}*/
 			go do(TypeAction(action))
 			pre := TypeAction(action)
 			for ii, value := range state {
@@ -972,6 +1005,8 @@ func main() {
 				case ActionBackward:
 					event.Key = gore.KEY_DOWNARROW1
 				case ActionNone:
+				case ActionActivate:
+					event.Key = gore.KEY_USE1
 				}
 				game.events = append(game.events, event)
 				last = ActionCount
@@ -997,6 +1032,8 @@ func main() {
 				case ActionBackward:
 					event.Key = gore.KEY_DOWNARROW1
 				case ActionNone:
+				case ActionActivate:
+					event.Key = gore.KEY_USE1
 				}
 				game.events = append(game.events, event)
 			}
@@ -1013,6 +1050,8 @@ func main() {
 				case ActionBackward:
 					event.Key = gore.KEY_DOWNARROW1
 				case ActionNone:
+				case ActionActivate:
+					event.Key = gore.KEY_USE1
 				}
 				game.events = append(game.events, event)
 			}

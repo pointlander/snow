@@ -14,8 +14,6 @@ const (
 	screenHeight = 480
 )
 
-const actions = 5
-
 type Auto struct {
 	Auto   *AutoEncoder
 	Action TypeAction
