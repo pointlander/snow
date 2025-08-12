@@ -895,7 +895,7 @@ func AutoEncoderMindMach3(frames chan Frame, do func(action TypeAction)) {
 				votes[act.Min] += act.Entropy
 			}
 			if act.Max >= 0 {
-				votes[act.Max] += 3 * act.Entropy
+				votes[act.Max] += 4 * act.Entropy
 			}
 			flight--
 
@@ -906,13 +906,13 @@ func AutoEncoderMindMach3(frames chan Frame, do func(action TypeAction)) {
 		for range flight {
 			act := <-done
 			if act.Min >= 0 {
-				votes[act.Min]++
+				votes[act.Min] += act.Entropy
 			}
 			if act.Max >= 0 {
-				votes[act.Max]++
+				votes[act.Max] += 4 * act.Entropy
 			}
 		}
-		if iteration%15 == 0 {
+		if iteration%30 == 0 {
 			max, action := float32(0.0), 0
 			for ii, value := range votes {
 				if value > max {
