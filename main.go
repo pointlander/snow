@@ -935,14 +935,14 @@ func AutoEncoderMindMach3(frames chan Frame, do func(action TypeAction)) {
 				input[i] = value / sum
 				output[i] = value / sum
 			}
-			max, min, learn, action := float32(0.0), float32(math.MaxFloat32), 0, 0
+			max, min, learn, action := float32(0.0), float32(math.MaxFloat32), TypeAction(0), TypeAction(0)
 			for i := range mind {
 				value := mind[i].Auto.MeasureSingle(input, output, &state)
 				if value > max {
-					max, learn = value, i
+					max, learn = value, mind[i].Action
 				}
 				if value < min {
-					min, action = value, i
+					min, action = value, mind[i].Action
 				}
 			}
 			mind[learn].Auto.EncodeSingle(input, output, rng, &state)
