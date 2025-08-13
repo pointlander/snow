@@ -824,7 +824,6 @@ func AutoEncoderMindMach3(frames chan Frame, do func(action TypeAction)) {
 			Entropy float32
 		}
 		pixels := make([]Patch, 0, 8)
-		mask, s := make(map[int]bool), 0
 		for y := 0; y < height-8; y += 8 {
 			for x := 0; x < width-8; x += 8 {
 				input, output := make([]float32, 8*8), make([]float32, 8*8)
@@ -857,12 +856,11 @@ func AutoEncoderMindMach3(frames chan Frame, do func(action TypeAction)) {
 					Output:  output,
 					Entropy: -entropy,
 				})
-				if rng.Intn(4) == 0 {
-					mask[s] = true
-				}
-				s++
 			}
 		}
+
+		indexes := rand.Perm((w - 1) * (h - 1))
+		indexes = indexes[:len(indexes)/4]
 
 		type Vote struct {
 			Min     int
@@ -872,13 +870,6 @@ func AutoEncoderMindMach3(frames chan Frame, do func(action TypeAction)) {
 		done := make(chan Vote, 8)
 		measure := func(i int, seed int64) {
 			rng := rand.New(rand.NewSource(seed))
-			if !mask[i] {
-				done <- Vote{
-					Min: -1,
-					Max: -1,
-				}
-				return
-			}
 			min, max, minIndex, maxIndex := float32(math.MaxFloat32), float32(0), 0, 0
 			for ii := range auto[i] {
 				value := auto[i][ii].Auto.MeasureSingle(pixels[i].Input, pixels[i].Output, &state)
@@ -897,12 +888,12 @@ func AutoEncoderMindMach3(frames chan Frame, do func(action TypeAction)) {
 			}
 		}
 		index, flight, cpus := 0, 0, runtime.NumCPU()
-		for index < len(pixels) && flight < cpus {
-			go measure(index, rng.Int63())
+		for index < len(indexes) && flight < cpus {
+			go measure(indexes[index], rng.Int63())
 			flight++
 			index++
 		}
-		for index < len(pixels) {
+		for index < len(indexes) {
 			act := <-done
 			if act.Min >= 0 {
 				votes[act.Min] += act.Entropy
@@ -912,7 +903,7 @@ func AutoEncoderMindMach3(frames chan Frame, do func(action TypeAction)) {
 			}
 			flight--
 
-			go measure(index, rng.Int63())
+			go measure(indexes[index], rng.Int63())
 			flight++
 			index++
 		}
